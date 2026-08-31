@@ -1,0 +1,12 @@
+.git
+.github
+.vs
+.vscode
+.idea
+**/bin
+**/obj
+docs
+frontend
+.env
+*.user
+*.suo

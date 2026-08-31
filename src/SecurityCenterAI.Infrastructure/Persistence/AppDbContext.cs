@@ -22,7 +22,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         modelBuilder.Entity<SecurityAnalysis>(entity =>
         {
-            entity.ToTable("security_analyses");
+            entity.ToTable(
+                "security_analyses",
+                table => table.HasCheckConstraint(
+                    "CK_security_analyses_Score",
+                    "\"Score\" >= 0 AND \"Score\" <= 100"));
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Score).IsRequired();
             entity.HasIndex(x => new { x.UserId, x.AnalyzedAtUtc });

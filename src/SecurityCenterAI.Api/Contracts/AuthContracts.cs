@@ -3,13 +3,17 @@ using System.ComponentModel.DataAnnotations;
 namespace SecurityCenterAI.Api.Contracts;
 
 public sealed record RegisterRequest(
-    [property: Required, StringLength(100, MinimumLength = 2)] string Name,
-    [property: Required, EmailAddress] string Email,
-    [property: Required, MinLength(8)] string Password);
+    [Required, StringLength(100, MinimumLength = 2)] string Name,
+    [Required, EmailAddress, StringLength(320)] string Email,
+    [Required, StringLength(128, MinimumLength = 8)]
+    [RegularExpression(
+        @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$",
+        ErrorMessage = "La contraseña debe incluir mayúscula, minúscula y número.")]
+    string Password);
 
 public sealed record LoginRequest(
-    [property: Required, EmailAddress] string Email,
-    [property: Required] string Password);
+    [Required, EmailAddress, StringLength(320)] string Email,
+    [Required, StringLength(128)] string Password);
 
 public sealed record AuthResponse(
     string AccessToken,

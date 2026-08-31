@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SecurityCenterAI.Api.Contracts;
 using SecurityCenterAI.Api.Services;
 using SecurityCenterAI.Domain.Entities;
@@ -16,6 +19,8 @@ public sealed class AuthController(
     ITokenService tokenService) : ControllerBase
 {
     [HttpPost("register")]
+    [AllowAnonymous]
+    [EnableRateLimiting("registration")]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register(
@@ -23,34 +28,48 @@ public sealed class AuthController(
         CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedName = request.Name.Trim();
+
+        if (normalizedName.Length < 2)
+        {
+            ModelState.AddModelError(nameof(request.Name), "El nombre debe tener al menos 2 caracteres.");
+            return ValidationProblem(ModelState);
+        }
 
         if (await dbContext.Users.AnyAsync(
                 user => user.Email == normalizedEmail,
                 cancellationToken))
         {
-            return Conflict(new ProblemDetails
-            {
-                Title = "El correo ya está registrado.",
-                Status = StatusCodes.Status409Conflict
-            });
+            return EmailAlreadyRegistered();
         }
 
         var user = new User
         {
-            Name = request.Name.Trim(),
+            Name = normalizedName,
             Email = normalizedEmail,
             PasswordHash = string.Empty
         };
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
 
         dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+            when (IsEmailUniqueViolation(exception))
+        {
+            dbContext.Entry(user).State = EntityState.Detached;
+            return EmailAlreadyRegistered();
+        }
 
         var response = CreateResponse(user);
-        return CreatedAtAction(nameof(Register), response);
+        return Created("/api/profile", response);
     }
 
     [HttpPost("login")]
+    [AllowAnonymous]
+    [EnableRateLimiting("login")]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login(
@@ -62,15 +81,25 @@ public sealed class AuthController(
             item => item.Email == normalizedEmail,
             cancellationToken);
 
-        if (user is null ||
-            passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password)
-                == PasswordVerificationResult.Failed)
+        if (user is null)
         {
-            return Unauthorized(new ProblemDetails
-            {
-                Title = "Credenciales inválidas.",
-                Status = StatusCodes.Status401Unauthorized
-            });
+            return InvalidCredentials();
+        }
+
+        var verification = passwordHasher.VerifyHashedPassword(
+            user,
+            user.PasswordHash,
+            request.Password);
+
+        if (verification == PasswordVerificationResult.Failed)
+        {
+            return InvalidCredentials();
+        }
+
+        if (verification == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         return Ok(CreateResponse(user));
@@ -83,5 +112,32 @@ public sealed class AuthController(
             token,
             expiresAt,
             new UserResponse(user.Id, user.Name, user.Email));
+    }
+
+    private static ConflictObjectResult EmailAlreadyRegistered()
+    {
+        return new ConflictObjectResult(new ProblemDetails
+        {
+            Title = "El correo ya está registrado.",
+            Status = StatusCodes.Status409Conflict
+        });
+    }
+
+    private static UnauthorizedObjectResult InvalidCredentials()
+    {
+        return new UnauthorizedObjectResult(new ProblemDetails
+        {
+            Title = "Credenciales inválidas.",
+            Status = StatusCodes.Status401Unauthorized
+        });
+    }
+
+    private static bool IsEmailUniqueViolation(DbUpdateException exception)
+    {
+        return exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "IX_users_Email"
+        };
     }
 }

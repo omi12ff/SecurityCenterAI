@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -19,13 +20,18 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
 
     public (string Token, DateTime ExpiresAtUtc) Create(User user)
     {
-        var expiresAt = DateTime.UtcNow.AddMinutes(_options.ExpirationMinutes);
+        var issuedAt = DateTime.UtcNow;
+        var expiresAt = issuedAt.AddMinutes(_options.ExpirationMinutes);
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Name, user.Name),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim(
+                JwtRegisteredClaimNames.Iat,
+                EpochTime.GetIntDate(issuedAt).ToString(CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64)
         };
 
         var credentials = new SigningCredentials(
@@ -36,6 +42,7 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
             _options.Issuer,
             _options.Audience,
             claims,
+            notBefore: issuedAt,
             expires: expiresAt,
             signingCredentials: credentials);
 

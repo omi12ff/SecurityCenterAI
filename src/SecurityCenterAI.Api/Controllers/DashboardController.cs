@@ -1,7 +1,8 @@
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SecurityCenterAI.Api.Contracts;
+using SecurityCenterAI.Api.Security;
 using SecurityCenterAI.Infrastructure.Persistence;
 
 namespace SecurityCenterAI.Api.Controllers;
@@ -12,27 +13,36 @@ namespace SecurityCenterAI.Api.Controllers;
 public sealed class DashboardController(AppDbContext dbContext) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<DashboardResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
+        if (!User.TryGetUserId(out var userId))
         {
             return Unauthorized();
         }
 
         var analyses = await dbContext.SecurityAnalyses
+            .AsNoTracking()
             .Where(item => item.UserId == userId)
             .OrderByDescending(item => item.AnalyzedAtUtc)
-            .Select(item => new { item.Id, item.Score, item.AnalyzedAtUtc })
+            .ThenByDescending(item => item.Id)
+            .Select(item => new AnalysisSummaryResponse(
+                item.Id,
+                item.Score,
+                item.AnalyzedAtUtc))
             .Take(5)
             .ToListAsync(cancellationToken);
 
-        return Ok(new
-        {
-            SecurityScore = analyses.FirstOrDefault()?.Score,
-            TotalAnalyses = await dbContext.SecurityAnalyses.CountAsync(
+        var totalAnalyses = await dbContext.SecurityAnalyses
+            .AsNoTracking()
+            .CountAsync(
                 item => item.UserId == userId,
-                cancellationToken),
-            RecentAnalyses = analyses
-        });
+                cancellationToken);
+
+        return Ok(new DashboardResponse(
+            analyses.FirstOrDefault()?.Score,
+            totalAnalyses,
+            analyses));
     }
 }

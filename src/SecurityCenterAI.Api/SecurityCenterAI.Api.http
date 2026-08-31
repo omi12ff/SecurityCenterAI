@@ -1,6 +1,40 @@
 @SecurityCenterAI.Api_HostAddress = http://localhost:5169
+@token = pega_aqui_el_accessToken
 
-GET {{SecurityCenterAI.Api_HostAddress}}/weatherforecast/
+GET {{SecurityCenterAI.Api_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+POST {{SecurityCenterAI.Api_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Usuario Backend",
+  "email": "backend@example.com",
+  "password": "Segura123"
+}
+
+###
+
+POST {{SecurityCenterAI.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "backend@example.com",
+  "password": "Segura123"
+}
+
+###
+
+GET {{SecurityCenterAI.Api_HostAddress}}/api/profile
+Authorization: Bearer {{token}}
+Accept: application/json
+
+###
+
+GET {{SecurityCenterAI.Api_HostAddress}}/api/dashboard
+Authorization: Bearer {{token}}
 Accept: application/json
 
 ###

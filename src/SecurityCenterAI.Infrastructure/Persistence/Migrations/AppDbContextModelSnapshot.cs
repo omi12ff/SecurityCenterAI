@@ -41,7 +41,12 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId", "AnalyzedAtUtc");
 
-                    b.ToTable("security_analyses", (string)null);
+                    b.ToTable("security_analyses", t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_security_analyses_Score",
+                                "\"Score\" >= 0 AND \"Score\" <= 100");
+                        });
                 });
 
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.User", b =>

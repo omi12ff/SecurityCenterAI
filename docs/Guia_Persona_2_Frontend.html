@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Security Center AI — Guía de trabajo para Persona 2</title>
+  <style>
+    @page { size: A4; margin: 18mm 17mm 20mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #172033;
+      font: 10.5pt/1.48 "Segoe UI", Arial, sans-serif;
+    }
+    h1, h2, h3 { color: #102a43; page-break-after: avoid; }
+    h1 { margin: 0 0 6px; font-size: 27pt; line-height: 1.1; }
+    h2 {
+      margin: 24px 0 10px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #2f80ed;
+      font-size: 17pt;
+    }
+    h3 { margin: 16px 0 7px; font-size: 12pt; }
+    p { margin: 6px 0 10px; }
+    a { color: #1558b0; }
+    ul, ol { margin: 5px 0 12px; padding-left: 24px; }
+    li { margin: 4px 0; }
+    code {
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: #edf2f7;
+      color: #19324d;
+      font: 9.5pt Consolas, monospace;
+    }
+    pre {
+      margin: 8px 0 13px;
+      padding: 10px 12px;
+      overflow-wrap: anywhere;
+      border-left: 4px solid #2f80ed;
+      border-radius: 4px;
+      background: #f1f5f9;
+      white-space: pre-wrap;
+      page-break-inside: avoid;
+      font: 9pt/1.42 Consolas, monospace;
+    }
+    table {
+      width: 100%;
+      margin: 8px 0 14px;
+      border-collapse: collapse;
+      page-break-inside: avoid;
+    }
+    th, td {
+      padding: 7px 8px;
+      border: 1px solid #cbd5e1;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #e8f1fd; }
+    .cover {
+      min-height: 245mm;
+      padding-top: 35mm;
+      page-break-after: always;
+    }
+    .eyebrow {
+      color: #2f80ed;
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .subtitle { max-width: 540px; color: #52606d; font-size: 15pt; }
+    .meta {
+      margin-top: 42px;
+      padding: 14px 16px;
+      border-left: 5px solid #2f80ed;
+      background: #f4f8fd;
+    }
+    .callout {
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      border-radius: 5px;
+      background: #fff8e6;
+      border: 1px solid #f3d58a;
+      page-break-inside: avoid;
+    }
+    .success {
+      background: #edf9f1;
+      border-color: #9dd4aa;
+    }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li::before { content: "☐ "; font-weight: bold; }
+    .page-break { page-break-before: always; }
+    .small { color: #627286; font-size: 9pt; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="eyebrow">Security Center AI</div>
+    <h1>Guía de trabajo<br>Persona 2 — Frontend</h1>
+    <p class="subtitle">
+      Pasos para colaborar en GitHub, construir la interfaz en Next.js
+      e integrar el login y el dashboard con la API.
+    </p>
+    <div class="meta">
+      <strong>Repositorio:</strong>
+      <a href="https://github.com/omi12ff/SecurityCenterAI">github.com/omi12ff/SecurityCenterAI</a><br>
+      <strong>Responsabilidad:</strong> Frontend, UI/UX, componentes, integración API y responsive.<br>
+      <strong>Rama estable:</strong> <code>main</code><br>
+      <strong>Rama de integración:</strong> <code>develop</code>
+    </div>
+  </section>
+
+  <h2>1. Antes de comenzar</h2>
+  <ol>
+    <li>Enviar al propietario del repositorio tu nombre de usuario de GitHub.</li>
+    <li>Aceptar la invitación como colaborador desde GitHub o desde el correo.</li>
+    <li>Instalar Git, Node.js LTS y Visual Studio Code.</li>
+    <li>Configurar tu identidad de Git una sola vez:</li>
+  </ol>
+  <pre>git config --global user.name "Tu Nombre"
+git config --global user.email "tu-correo@example.com"</pre>
+
+  <h2>2. Descargar el proyecto</h2>
+  <pre>git clone https://github.com/omi12ff/SecurityCenterAI.git
+cd SecurityCenterAI
+git switch develop
+git pull origin develop</pre>
+  <p>Verifica que estés en la rama correcta:</p>
+  <pre>git status</pre>
+  <div class="callout">
+    No programes directamente sobre <code>main</code> ni sobre
+    <code>develop</code>. Cada tarea debe tener su propia rama
+    <code>feature/*</code>.
+  </div>
+
+  <h2>3. Crear la rama para el frontend</h2>
+  <pre>git switch develop
+git pull origin develop
+git switch -c feature/frontend-base</pre>
+  <p>Si otra persona ya creó esa rama, utiliza:</p>
+  <pre>git fetch origin
+git switch feature/frontend-base</pre>
+
+  <h2>4. Crear la aplicación Next.js</h2>
+  <p>Desde la carpeta raíz <code>SecurityCenterAI</code>:</p>
+  <pre>npx create-next-app@latest frontend --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
+cd frontend
+npm run dev</pre>
+  <p>
+    Abrir <code>http://localhost:3000</code>. Si aparece la pantalla inicial
+    de Next.js, la instalación funciona.
+  </p>
+
+  <h3>Dependencias de interfaz recomendadas</h3>
+  <pre>npx shadcn@latest init
+npx shadcn@latest add button card input label form alert badge
+npm install react-hook-form zod @hookform/resolvers</pre>
+
+  <h2>5. Estructura sugerida</h2>
+  <pre>frontend/src/
+├── app/
+│   ├── (auth)/
+│   │   ├── login/page.tsx
+│   │   └── register/page.tsx
+│   ├── dashboard/page.tsx
+│   └── layout.tsx
+├── components/
+│   ├── auth/
+│   ├── dashboard/
+│   └── ui/
+├── lib/
+│   ├── api.ts
+│   └── auth.ts
+└── types/
+    └── api.ts</pre>
+
+  <h2>6. Configurar la conexión con el backend</h2>
+  <p>Crear <code>frontend/.env.local</code>:</p>
+  <pre>NEXT_PUBLIC_API_URL=http://localhost:5000</pre>
+  <div class="callout">
+    Confirma el puerto real mostrado al ejecutar la API. No subas
+    <code>.env.local</code> a GitHub. Next.js lo excluye normalmente, pero
+    compruébalo con <code>git status</code>.
+  </div>
+
+  <h3>Cliente inicial de API</h3>
+  <p>Crear <code>frontend/src/lib/api.ts</code>:</p>
+  <pre>const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+export async function apiFetch&lt;T&gt;(
+  path: string,
+  options: RequestInit = {}
+): Promise&lt;T&gt; {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() =&gt; null);
+    throw new Error(error?.title ?? "No se pudo completar la solicitud");
+  }
+
+  return response.json();
+}</pre>
+
+  <h2>7. Contrato actual de la API</h2>
+  <table>
+    <thead>
+      <tr><th>Función</th><th>Método y ruta</th><th>Autenticación</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Registro</td><td><code>POST /api/auth/register</code></td><td>No</td></tr>
+      <tr><td>Login</td><td><code>POST /api/auth/login</code></td><td>No</td></tr>
+      <tr><td>Dashboard</td><td><code>GET /api/dashboard</code></td><td>Bearer JWT</td></tr>
+      <tr><td>Estado de API</td><td><code>GET /health</code></td><td>No</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Registro</h3>
+  <pre>{
+  "name": "Nombre Apellido",
+  "email": "usuario@example.com",
+  "password": "ClaveSegura123!"
+}</pre>
+
+  <h3>Login</h3>
+  <pre>{
+  "email": "usuario@example.com",
+  "password": "ClaveSegura123!"
+}</pre>
+
+  <h3>Respuesta de autenticación</h3>
+  <pre>{
+  "accessToken": "jwt...",
+  "expiresAtUtc": "2026-07-25T18:00:00Z",
+  "user": {
+    "id": "uuid",
+    "name": "Nombre Apellido",
+    "email": "usuario@example.com"
+  }
+}</pre>
+
+  <h3>Solicitud autenticada</h3>
+  <pre>const token = sessionStorage.getItem("accessToken");
+
+const dashboard = await apiFetch("/api/dashboard", {
+  headers: { Authorization: `Bearer ${token}` },
+});</pre>
+  <p class="small">
+    Para el MVP puede utilizarse sessionStorage. Antes de producción se debe
+    evaluar autenticación con cookies HttpOnly para reducir la exposición del token.
+  </p>
+
+  <div class="page-break"></div>
+  <h2>8. Primera entrega del frontend</h2>
+  <p>Construir en este orden:</p>
+  <ol>
+    <li>Layout general, colores, tipografía y navegación.</li>
+    <li>Página de registro con validación y mensajes de error.</li>
+    <li>Página de login y almacenamiento temporal del token.</li>
+    <li>Redirección al dashboard después del login.</li>
+    <li>Dashboard protegido con puntaje, total de análisis e historial reciente.</li>
+    <li>Estados de carga, error y dashboard sin análisis.</li>
+    <li>Diseño responsive para teléfono, tableta y escritorio.</li>
+  </ol>
+
+  <h3>Criterios de aceptación</h3>
+  <ul class="checklist">
+    <li>Registro válido redirige al dashboard.</li>
+    <li>Correo duplicado muestra un mensaje comprensible.</li>
+    <li>Credenciales incorrectas no permiten entrar.</li>
+    <li>Dashboard envía el JWT en la cabecera Authorization.</li>
+    <li>La interfaz funciona desde 360 px de ancho.</li>
+    <li>No hay errores de TypeScript, ESLint ni consola.</li>
+  </ul>
+
+  <h2>9. Commits y publicación de la rama</h2>
+  <p>Revisar exactamente qué se modificó:</p>
+  <pre>git status
+git diff</pre>
+  <p>Crear commits pequeños:</p>
+  <pre>git add frontend
+git commit -m "Add frontend base with Next.js"
+git push -u origin feature/frontend-base</pre>
+  <p>Ejemplos para siguientes commits:</p>
+  <pre>git commit -m "Add login and registration forms"
+git commit -m "Integrate authentication API"
+git commit -m "Add responsive security dashboard"</pre>
+
+  <h2>10. Pruebas antes del Pull Request</h2>
+  <pre>cd frontend
+npm run lint
+npm run build</pre>
+  <p>También probar manualmente:</p>
+  <ul>
+    <li>Registro, login y logout.</li>
+    <li>Errores del servidor y API apagada.</li>
+    <li>Token inválido o vencido.</li>
+    <li>Vista móvil y escritorio.</li>
+    <li>Navegación por teclado y etiquetas de formularios.</li>
+  </ul>
+
+  <h2>11. Pull Request hacia develop</h2>
+  <ol>
+    <li>Abrir el repositorio en GitHub.</li>
+    <li>Seleccionar <strong>Pull requests → New pull request</strong>.</li>
+    <li>Elegir base <code>develop</code> y compare <code>feature/frontend-base</code>.</li>
+    <li>Explicar qué cambió, cómo probarlo y adjuntar capturas.</li>
+    <li>Solicitar revisión al compañero.</li>
+    <li>No fusionar hasta que las pruebas pasen y la revisión sea aprobada.</li>
+  </ol>
+  <p>Plantilla de descripción:</p>
+  <pre>## Cambios
+- ...
+
+## Cómo probar
+1. ...
+
+## Evidencia
+- npm run lint: correcto
+- npm run build: correcto
+- Capturas: ...
+
+## Pendientes
+- ...</pre>
+
+  <h2>12. Cómo mantenerse actualizado</h2>
+  <p>Antes de comenzar cada jornada:</p>
+  <pre>git switch develop
+git pull origin develop
+git switch feature/frontend-base
+git merge develop</pre>
+  <p>
+    Si aparecen conflictos, resolverlos con cuidado, probar nuevamente y crear
+    un commit. Nunca utilizar comandos destructivos para “borrar” conflictos.
+  </p>
+
+  <h2>13. Reglas del equipo</h2>
+  <ul>
+    <li><code>main</code> contiene únicamente versiones estables.</li>
+    <li><code>develop</code> reúne funcionalidades revisadas para pruebas.</li>
+    <li>Cada funcionalidad nace desde <code>develop</code> en una rama <code>feature/*</code>.</li>
+    <li>Nadie aprueba su propio Pull Request.</li>
+    <li>Los secretos nunca se guardan en Git.</li>
+    <li>Un cambio de contrato de API se comunica antes de implementarlo.</li>
+    <li>Swagger es la referencia del contrato backend.</li>
+    <li>Los errores se describen con pasos para reproducirlos.</li>
+  </ul>
+
+  <h2>14. Definición de “terminado”</h2>
+  <div class="callout success">
+    Una tarea está terminada cuando funciona localmente, es responsive, pasa
+    lint y build, maneja errores, está documentada, fue subida a una rama
+    <code>feature/*</code> y recibió revisión mediante Pull Request.
+  </div>
+
+  <h2>Resumen rápido</h2>
+  <pre>git switch develop
+git pull origin develop
+git switch -c feature/mi-tarea
+
+# trabajar y probar
+
+git status
+git add frontend
+git commit -m "Descripción breve"
+git push -u origin feature/mi-tarea
+
+# abrir PR: feature/mi-tarea → develop</pre>
+</body>
+</html>

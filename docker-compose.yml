@@ -1,12 +1,14 @@
+name: securitycenterai
+
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-security_center_ai}
       POSTGRES_USER: ${POSTGRES_USER:-security_center}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-security_center_local_2026}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,3 +19,4 @@ services:
 
 volumes:
   postgres_data:
+    name: securitycenterai_postgres_data
