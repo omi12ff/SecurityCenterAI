@@ -20,15 +20,20 @@ public sealed class DashboardController(AppDbContext dbContext) : ControllerBase
         }
 
         var analyses = await dbContext.SecurityAnalyses
+            .AsNoTracking()
             .Where(item => item.UserId == userId)
             .OrderByDescending(item => item.AnalyzedAtUtc)
-            .Select(item => new { item.Id, item.Score, item.AnalyzedAtUtc })
+            .ThenByDescending(item => item.Id)
+            .Select(item => new { item.Id, item.Score, item.AnalyzedAtUtc, item.DeviceId, item.Source,
+                item.ScoringVersion, item.CoveragePercent, item.PassedCount, item.AttentionCount, item.UnknownCount,
+                item.NotApplicableCount, item.AgentVersion, item.StartedAtUtc, item.CompletedAtUtc, item.ReportId })
             .Take(5)
             .ToListAsync(cancellationToken);
 
         return Ok(new
         {
             SecurityScore = analyses.FirstOrDefault()?.Score,
+            LastAnalysis = analyses.FirstOrDefault(),
             TotalAnalyses = await dbContext.SecurityAnalyses.CountAsync(
                 item => item.UserId == userId,
                 cancellationToken),

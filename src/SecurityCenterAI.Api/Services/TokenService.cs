@@ -10,22 +10,24 @@ namespace SecurityCenterAI.Api.Services;
 
 public interface ITokenService
 {
-    (string Token, DateTime ExpiresAtUtc) Create(User user);
+    (string Token, DateTime ExpiresAtUtc) Create(User user, Guid sessionId);
 }
 
-public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
+public sealed class TokenService(IOptions<JwtOptions> options, TimeProvider clock) : ITokenService
 {
     private readonly JwtOptions _options = options.Value;
 
-    public (string Token, DateTime ExpiresAtUtc) Create(User user)
+    public (string Token, DateTime ExpiresAtUtc) Create(User user, Guid sessionId)
     {
-        var expiresAt = DateTime.UtcNow.AddMinutes(_options.ExpirationMinutes);
+        var expiresAt = clock.GetUtcNow().UtcDateTime.AddMinutes(_options.ExpirationMinutes);
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Name, user.Name),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim("sid", sessionId.ToString()),
+            new Claim("email_verified", user.EmailVerified ? "true" : "false")
         };
 
         var credentials = new SigningCredentials(

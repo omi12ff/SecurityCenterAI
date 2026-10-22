@@ -1,0 +1,22 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import type { UserProfile } from "@/lib/contracts";
+import { logoutAction } from "@/app/actions";
+import { Icon } from "./icons";
+import { LogoutButton } from "./logout-button";
+
+export function DeviceShell({ user, children }: { user: UserProfile; children: ReactNode }) {
+  return <div className="dashboard-shell">
+    <a href="#contenido" className="skip-link">Ir al contenido</a>
+    <aside className="sidebar" aria-label="Menú principal">
+      <Link href="/dashboard" className="sidebar-brand"><span className="brand-mark"><Icon name="shield" /></span><span>Security Center<span className="brand-ai">AI</span></span></Link>
+      <p className="nav-section-label">MI ESPACIO</p><nav className="sidebar-nav" aria-label="Secciones de tu espacio">
+        <Link href="/dashboard" className="nav-link"><Icon name="grid" className="nav-icon" /><span>Resumen</span></Link>
+        <Link href="/devices" className="nav-link nav-link--active" aria-current="page"><Icon name="monitor" className="nav-icon" /><span>Dispositivos</span></Link>
+        <Link href="/account" className="nav-link"><Icon name="user" className="nav-icon" /><span>Mi cuenta</span></Link>
+      </nav>
+      <div className="sidebar-bottom"><div className="sidebar-user"><span className="avatar" aria-hidden="true">{user.name.slice(0, 2).toLocaleUpperCase("es")}</span><div className="sidebar-user-meta"><strong>{user.name}</strong><span>{user.email}</span></div></div><form action={logoutAction}><LogoutButton /></form></div>
+    </aside>
+    <main className="dashboard-main" id="contenido"><header className="dashboard-topbar"><p className="breadcrumb">Mi espacio <span aria-hidden="true">/</span><Link href="/devices">Dispositivos</Link></p><span className="environment-tag">Versión inicial</span></header><div className="dashboard-content devices-content">{children}<footer className="dashboard-footer"><span>Security Center AI</span><p>Información clara. Decisiones con evidencia.</p></footer></div></main>
+  </div>;
+}

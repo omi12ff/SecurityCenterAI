@@ -1,0 +1,15 @@
+.git
+.vs
+.vscode
+.idea
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+**/appsettings.Local.json
+**/node_modules
+**/.next
+**/bin
+**/obj
+**/test-results
+**/playwright-report

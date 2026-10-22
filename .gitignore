@@ -7,3 +7,10 @@
 appsettings.Local.json
 *.user
 *.suo
+**/node_modules/
+**/.next/
+**/.env.local
+**/.env.*.local
+**/*.tsbuildinfo
+**/playwright-report/
+**/test-results/
