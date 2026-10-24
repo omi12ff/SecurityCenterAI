@@ -12,12 +12,17 @@ public sealed class EmailOptions
     public string? Username { get; init; }
     public string? Password { get; init; }
     public bool EnableSsl { get; init; }
+    public int DeliveryAttempts { get; init; } = 3;
+    public int RetryDelaySeconds { get; init; } = 1;
+    public int QueueLifetimeMinutes { get; init; } = 5;
 
     public static void Validate(IConfiguration configuration, IHostEnvironment environment)
     {
         var section = configuration.GetSection(SectionName);
         var options = section.Get<EmailOptions>() ?? new EmailOptions();
         if (string.IsNullOrWhiteSpace(options.Host) || options.Port is < 1 or > 65535 ||
+            options.DeliveryAttempts is < 1 or > 5 || options.RetryDelaySeconds is < 1 or > 30 ||
+            options.QueueLifetimeMinutes is < 1 or > 30 ||
             !MailAddress.TryCreate(options.From, out var from) || from.Address != options.From)
             throw new InvalidOperationException("La configuración de correo no es válida.");
         var frontend = configuration["FrontendUrl"] ?? "http://localhost:3000";

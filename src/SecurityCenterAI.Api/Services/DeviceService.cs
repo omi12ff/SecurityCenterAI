@@ -37,15 +37,17 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
                 .OrderByDescending(finding => finding.DetectedAtUtc).ThenByDescending(finding => finding.Id).Take(100))
             .Where(item => item.DeviceId == deviceId && item.UserId == userId)
             .OrderByDescending(item => item.AnalyzedAtUtc).ThenByDescending(item => item.Id).Take(20).ToListAsync(cancellationToken);
-        return new DeviceDetailResponse(await ProfileAsync(device, cancellationToken), analyses.Select(analysis =>
-            new DeviceAnalysisResponse(analysis.Id, analysis.Score, analysis.AnalyzedAtUtc, analysis.Findings
-                .OrderByDescending(finding => finding.DetectedAtUtc).ThenByDescending(finding => finding.Id).Select(finding => new SecurityFindingResponse(
-                    finding.Id, finding.RuleId, finding.RuleVersion, finding.Title, finding.Severity,
-                    finding.Evidence, finding.Recommendation, finding.DetectedAtUtc, finding.Status)).ToList(),
-                analysis.Source, analysis.ScoringVersion, analysis.CoveragePercent, analysis.PassedCount,
-                analysis.AttentionCount, analysis.UnknownCount, analysis.NotApplicableCount, analysis.AgentVersion,
-                analysis.StartedAtUtc, analysis.CompletedAtUtc, analysis.ReportId)).ToList());
+        return new DeviceDetailResponse(await ProfileAsync(device, cancellationToken), analyses.Select(ToAnalysisResponse).ToList());
     }
+
+    internal static DeviceAnalysisResponse ToAnalysisResponse(SecurityAnalysis analysis) =>
+        new(analysis.Id, analysis.Score, analysis.AnalyzedAtUtc, analysis.Findings
+            .OrderBy(finding => finding.RuleId).ThenBy(finding => finding.Id).Select(finding => new SecurityFindingResponse(
+                finding.Id, finding.RuleId, finding.RuleVersion, finding.Title, finding.Severity,
+                finding.Evidence, finding.Recommendation, finding.DetectedAtUtc, finding.Status)).ToList(),
+            analysis.Source, analysis.ScoringVersion, analysis.CoveragePercent, analysis.PassedCount,
+            analysis.AttentionCount, analysis.UnknownCount, analysis.NotApplicableCount, analysis.AgentVersion,
+            analysis.StartedAtUtc, analysis.CompletedAtUtc, analysis.ReportId);
 
     public async Task<DevicePairingResponse> CreateAsync(Guid userId, string name, CancellationToken cancellationToken)
     {
@@ -61,12 +63,14 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
             var device = new Device { User = user, UserId = userId, Name = name, CreatedAtUtc = Now };
             database.Devices.Add(device);
             var (code, expires) = AddCode(device);
+            SecurityActivityRecorder.Add(database, userId, SecurityActivityKind.DeviceRegistered, Now);
             try
             {
                 await database.SaveChangesAsync(cancellationToken);
                 return new DevicePairingResponse(Profile(device, null), code, expires);
             }
-            catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); }
+            catch (Exception exception) when (ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (AuditOwnerRemoved(exception)) { database.ChangeTracker.Clear(); throw Missing(); }
             catch (DbUpdateException exception) when (exception.InnerException is PostgresException
                 { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "UX_devices_usuario_activo" })
             {
@@ -89,12 +93,14 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
             device.ConcurrencyStamp = Guid.NewGuid();
             user.ConcurrencyStamp = Guid.NewGuid();
             var (code, expires) = AddCode(device);
+            SecurityActivityRecorder.Add(database, userId, SecurityActivityKind.PairingCodeIssued, Now);
             try
             {
                 await database.SaveChangesAsync(cancellationToken);
                 return new DevicePairingResponse(await ProfileAsync(device, cancellationToken), code, expires);
             }
-            catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); }
+            catch (Exception exception) when (ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (AuditOwnerRemoved(exception)) { database.ChangeTracker.Clear(); throw Missing(); }
         }
         throw new DeviceOperationException(409, "Otra operación modificó el dispositivo. Volvé a intentar.");
     }
@@ -109,8 +115,10 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
             device.ConcurrencyStamp = Guid.NewGuid();
             await RevokeCodesAsync(deviceId, cancellationToken);
             await RevokeCredentialsAsync(deviceId, cancellationToken);
+            SecurityActivityRecorder.Add(database, userId, SecurityActivityKind.DeviceRevoked, Now);
             try { await database.SaveChangesAsync(cancellationToken); return; }
-            catch (DbUpdateConcurrencyException) when (attempt < 4) { database.ChangeTracker.Clear(); }
+            catch (Exception exception) when (attempt < 4 && ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (AuditOwnerRemoved(exception)) { database.ChangeTracker.Clear(); throw Missing(); }
         }
     }
 
@@ -144,11 +152,12 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
             var expires = Now.AddDays(options.Value.CredentialDays);
             database.DeviceCredentials.Add(new DeviceCredential
             { Device = device, DeviceId = device.Id, TokenHash = OpaqueToken.Hash(token), CreatedAtUtc = Now, ExpiresAtUtc = expires });
+            SecurityActivityRecorder.Add(database, device.UserId, SecurityActivityKind.DevicePaired, Now);
             await database.SaveChangesAsync(cancellationToken);
             if (transaction is not null) await transaction.CommitAsync(cancellationToken);
             return new DevicePairResponse(device.Id, token, expires);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && AuditOwnerRemoved(update))
         {
             if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
             database.ChangeTracker.Clear();
@@ -212,10 +221,12 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
         return Profile(device, credential);
     }
 
-    private static DeviceResponse Profile(Device device, DeviceCredential? credential) => new(device.Id, device.Name,
+    private static DeviceResponse Profile(Device device, DeviceCredential? credential) => ToDeviceResponse(device, credential?.ExpiresAtUtc);
+
+    internal static DeviceResponse ToDeviceResponse(Device device, DateTime? validCredentialExpiresAtUtc) => new(device.Id, device.Name,
         device.CreatedAtUtc, device.PairedAtUtc, device.LastSeenAtUtc, device.RevokedAtUtc, device.Platform, device.AgentVersion,
-        device.RevokedAtUtc.HasValue ? "revoked" : credential is null ? "pending" : "linked",
-        device.RevokedAtUtc.HasValue ? null : credential?.ExpiresAtUtc);
+        device.RevokedAtUtc.HasValue ? "revoked" : validCredentialExpiresAtUtc is null ? "pending" : "linked",
+        device.RevokedAtUtc.HasValue ? null : validCredentialExpiresAtUtc);
 
     private static string ValidateVersion(string version)
     {
@@ -223,4 +234,12 @@ public sealed class DeviceService(AppDbContext database, TimeProvider clock, IOp
         if (version.Length is < 1 or > 64 || version.Any(char.IsControl)) throw new DeviceOperationException(400, "La versión del agente no es válida.");
         return version;
     }
+
+    private static bool AuditOwnerRemoved(DbUpdateException exception) => exception.InnerException is PostgresException
+        { SqlState: PostgresErrorCodes.ForeignKeyViolation, ConstraintName: "FK_security_activity_users_id_usuario" };
+
+    private static bool ConcurrentWrite(Exception exception) => exception is DbUpdateConcurrencyException ||
+        exception is InvalidOperationException { InnerException: { } inner } && ConcurrentWrite(inner) ||
+        exception is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure } ||
+        exception is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure } };
 }

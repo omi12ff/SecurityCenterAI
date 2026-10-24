@@ -48,26 +48,32 @@ export function parseDeviceDetail(value: unknown): DeviceDetail | null {
   if (!device || !Array.isArray(item.analyses)) return null;
   const analyses: DeviceAnalysis[] = [];
   for (const record of item.analyses) {
-    if (!record || typeof record !== "object") return null;
-    const analysis = record as Record<string, unknown>;
-    const summary = parseAnalysisSummary(analysis);
-    if (!summary || !Array.isArray(analysis.findings)) return null;
-    const findings: DeviceFinding[] = [];
-    for (const record of analysis.findings) {
-      if (!record || typeof record !== "object") return null;
-      const finding = record as Record<string, unknown>;
-      if (!isDeviceId(finding.id) || typeof finding.ruleId !== "string" || !Number.isInteger(finding.ruleVersion) || (finding.ruleVersion as number) < 1 ||
-        typeof finding.title !== "string" || typeof finding.evidence !== "string" || typeof finding.recommendation !== "string" ||
-        !["informational", "low", "medium", "high", "critical"].includes(finding.severity as string) || !isDate(finding.detectedAtUtc) ||
-        !(finding.status === undefined || finding.status === null || ["passed", "attention", "unknown", "notApplicable"].includes(finding.status as string))) return null;
-      findings.push({ id: finding.id, ruleId: finding.ruleId, ruleVersion: finding.ruleVersion as number, title: finding.title,
-        severity: finding.severity as string, evidence: finding.evidence, recommendation: finding.recommendation, detectedAtUtc: finding.detectedAtUtc,
-        status: (finding.status ?? null) as CheckStatus | null });
-    }
-    if (summary.source === "windows-agent" && (findings.length !== 10 || findings.some(item => item.status === null) ||
-      findings.filter(item => item.status === "passed").length !== summary.passedCount || findings.filter(item => item.status === "attention").length !== summary.attentionCount ||
-      findings.filter(item => item.status === "unknown").length !== summary.unknownCount || findings.filter(item => item.status === "notApplicable").length !== summary.notApplicableCount)) return null;
-    analyses.push({ ...summary, findings });
+    const analysis = parseDeviceAnalysis(record);
+    if (!analysis) return null;
+    analyses.push(analysis);
   }
   return { device, analyses };
+}
+
+export function parseDeviceAnalysis(record: unknown): DeviceAnalysis | null {
+  if (!record || typeof record !== "object") return null;
+  const analysis = record as Record<string, unknown>;
+  const summary = parseAnalysisSummary(analysis);
+  if (!summary || !Array.isArray(analysis.findings)) return null;
+  const findings: DeviceFinding[] = [];
+  for (const record of analysis.findings) {
+    if (!record || typeof record !== "object") return null;
+    const finding = record as Record<string, unknown>;
+    if (!isDeviceId(finding.id) || typeof finding.ruleId !== "string" || !Number.isInteger(finding.ruleVersion) || (finding.ruleVersion as number) < 1 ||
+      typeof finding.title !== "string" || typeof finding.evidence !== "string" || typeof finding.recommendation !== "string" ||
+      !["informational", "low", "medium", "high", "critical"].includes(finding.severity as string) || !isDate(finding.detectedAtUtc) ||
+      !(finding.status === undefined || finding.status === null || ["passed", "attention", "unknown", "notApplicable"].includes(finding.status as string))) return null;
+    findings.push({ id: finding.id, ruleId: finding.ruleId, ruleVersion: finding.ruleVersion as number, title: finding.title,
+      severity: finding.severity as string, evidence: finding.evidence, recommendation: finding.recommendation, detectedAtUtc: finding.detectedAtUtc,
+      status: (finding.status ?? null) as CheckStatus | null });
+  }
+  if (summary.source === "windows-agent" && (findings.length !== 10 || findings.some(item => item.status === null) ||
+    findings.filter(item => item.status === "passed").length !== summary.passedCount || findings.filter(item => item.status === "attention").length !== summary.attentionCount ||
+    findings.filter(item => item.status === "unknown").length !== summary.unknownCount || findings.filter(item => item.status === "notApplicable").length !== summary.notApplicableCount)) return null;
+  return { ...summary, findings };
 }

@@ -5,6 +5,10 @@ import { Icon } from "./icons";
 import { LogoutButton } from "./logout-button";
 import { RefreshButton } from "./refresh-button";
 import { AnalysisSummaryPanel } from "./analysis-summary";
+import { AnalysisPrioritiesPanel } from "./analysis-priorities";
+import type { DashboardPriorities } from "@/lib/analysis-priorities";
+import type { DeviceRecord } from "@/lib/devices";
+import { InformationLinks } from "./information-links";
 
 const dateFormatter = new Intl.DateTimeFormat("es-PY", {
   dateStyle: "medium",
@@ -22,8 +26,9 @@ function analysisDate(value: string) {
     : { date: dateFormatter.format(date), time: timeFormatter.format(date) };
 }
 
-export function DashboardView({ user, data }: { user: UserProfile; data: DashboardData }) {
+export function DashboardView({ user, data, devices, priorities }: { user: UserProfile; data: DashboardData; devices: DeviceRecord[] | null; priorities: DashboardPriorities }) {
   const firstName = user.name.trim().split(/\s+/)[0];
+  const deviceById = new Map((devices ?? []).map(device => [device.id, device]));
   const initials = user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("es");
   const today = new Intl.DateTimeFormat("es-PY", {
     weekday: "long",
@@ -46,7 +51,9 @@ export function DashboardView({ user, data }: { user: UserProfile; data: Dashboa
         <nav className="sidebar-nav" aria-label="Secciones de tu espacio">
           <a href="#resumen" className="nav-link nav-link--active"><Icon name="grid" className="nav-icon" /><span>Resumen</span></a>
           <a href="#historial" className="nav-link"><Icon name="history" className="nav-icon" /><span>Historial</span></a>
+          <Link href="/getting-started" className="nav-link"><Icon name="info" className="nav-icon" /><span>Primeros pasos</span></Link>
           <Link href="/devices" className="nav-link"><Icon name="monitor" className="nav-icon" /><span>Dispositivos</span></Link>
+          <Link href="/tools/scam-check" className="nav-link"><Icon name="mail" className="nav-icon" /><span>Enlaces y mensajes</span></Link>
           <Link href="/account" className="nav-link"><Icon name="user" className="nav-icon" /><span>Mi cuenta</span></Link>
         </nav>
 
@@ -68,13 +75,13 @@ export function DashboardView({ user, data }: { user: UserProfile; data: Dashboa
 
         <div className="dashboard-content">
           <section id="resumen" aria-labelledby="dashboard-title">
-            <div className="page-heading">
+            <div className="page-heading dashboard-page-heading">
               <div>
                 <p className="page-greeting">Hola{firstName ? `, ${firstName}` : ""} <span aria-hidden="true">✦</span></p>
                 <h1 id="dashboard-title">Tu seguridad, en un solo lugar</h1>
                 <p className="page-description">Este es tu espacio para consultar los resultados guardados de tu cuenta.</p>
               </div>
-              <p className="today-date">{today}</p>
+              <div className="dashboard-heading-tools"><p className="today-date">{today}</p><RefreshButton label="Actualizar resumen" /></div>
             </div>
 
             <div className="stats-grid">
@@ -93,12 +100,16 @@ export function DashboardView({ user, data }: { user: UserProfile; data: Dashboa
               </article>
             </div>
 
-            {data.lastAnalysis?.source === "windows-agent" && <section className="section-card dashboard-analysis" aria-label="Detalle del último resultado"><AnalysisSummaryPanel analysis={data.lastAnalysis} compact />{data.lastAnalysis.deviceId && <Link className="device-back-link" href={`/devices/${data.lastAnalysis.deviceId}#analysis-${data.lastAnalysis.id}`}>Ver comprobaciones del equipo →</Link>}</section>}
+            {data.lastAnalysis?.source === "windows-agent" && <>
+              <AnalysisPrioritiesPanel analysis={data.lastAnalysis} detail={priorities} revoked={deviceById.get(data.lastAnalysis.deviceId ?? "")?.status === "revoked"} />
+              <details className="section-card dashboard-analysis"><summary>Ver puntos, cobertura y estados del último informe</summary><AnalysisSummaryPanel analysis={data.lastAnalysis} compact />{data.lastAnalysis.deviceId && <Link className="device-back-link" href={`/devices/${data.lastAnalysis.deviceId}#analysis-${data.lastAnalysis.id}`}>Ver comprobaciones del equipo →</Link>}</details>
+            </>}
+            {data.lastAnalysis && data.lastAnalysis.source !== "windows-agent" && <p className="form-alert">El último registro es anterior al agente y no incluye estados de comprobación o cobertura. Enviá un informe nuevo para conocer qué revisar.</p>}
 
             <div className="agent-callout">
               <span className="callout-icon"><Icon name="monitor" width="25" height="25" /></span>
-              <div className="callout-content"><h2>Consultá las comprobaciones de tu equipo</h2><p>Vinculá el agente Windows y enviá un informe para ver sus puntos confirmados, cobertura y recomendaciones. Cada envío requiere una acción desde el agente.</p></div>
-              <Link href="/devices" className="button button--secondary">Mis dispositivos</Link>
+              <div className="callout-content"><h2>{data.totalAnalyses === 0 ? "Prepará tu primer análisis" : "Consultá las comprobaciones de tu equipo"}</h2><p>{data.totalAnalyses === 0 ? "Seguí la guía para verificar tu correo, descargar el agente y vincular tu equipo. Vos decidís cuándo enviar el informe." : "Vinculá el agente Windows y enviá un informe para ver sus puntos confirmados, cobertura y recomendaciones. Cada envío requiere una acción desde el agente."}</p></div>
+              <Link href="/getting-started" className="button button--secondary">{data.totalAnalyses === 0 ? "Empezar con mi equipo" : "Guía del agente"}</Link>
             </div>
           </section>
 
@@ -109,10 +120,11 @@ export function DashboardView({ user, data }: { user: UserProfile; data: Dashboa
                 <div className="table-wrap" tabIndex={0} role="region" aria-label="Resultados recientes, tabla desplazable">
                   <table className="history-table">
                     <caption className="sr-only">Últimos análisis registrados, del más reciente al más antiguo.</caption>
-                    <thead><tr><th scope="col">Análisis</th><th scope="col">Fecha y hora</th><th scope="col">Puntaje guardado</th></tr></thead>
+                    <thead><tr><th scope="col">Análisis y equipo</th><th scope="col">Fecha y hora</th><th scope="col">Puntos guardados</th><th scope="col">Cobertura y estados</th></tr></thead>
                     <tbody>{data.recentAnalyses.map((analysis) => {
                       const formatted = analysisDate(analysis.analyzedAtUtc);
-                      return <tr key={analysis.id}><td><span className="history-id"><Icon name="shield" /><span>{analysis.deviceId ? <Link href={`/devices/${analysis.deviceId}#analysis-${analysis.id}`}>Ver resultado del equipo</Link> : "Resultado guardado"}</span></span>{analysis.source === "windows-agent" && <span className="table-time">Agente Windows · cobertura {analysis.coveragePercent}%</span>}</td><td><time dateTime={analysis.analyzedAtUtc}>{formatted.date}<span className="table-time">{formatted.time}</span></time></td><td><span className="score-chip">{analysis.score ?? "Sin puntaje"}</span>{(analysis.unknownCount ?? 0) > 0 && <span className="table-time">Resultado parcial</span>}</td></tr>;
+                      const device = deviceById.get(analysis.deviceId ?? "");
+                      return <tr key={analysis.id}><td><span className="history-id"><Icon name="shield" /><span>{analysis.deviceId ? <Link href={`/devices/${analysis.deviceId}/analyses/${analysis.id}`} aria-label={`Abrir análisis de ${device?.name ?? "equipo registrado"} del ${formatted.date}, ${formatted.time}`}>{device?.name ?? "Equipo registrado"}</Link> : "Registro anterior sin equipo"}</span></span><span className="table-time">{analysis.source === "windows-agent" ? "Agente Windows" : "Registro anterior"}{device?.status === "revoked" ? " · acceso revocado" : ""}</span></td><td><time dateTime={analysis.analyzedAtUtc}>{formatted.date}<span className="table-time">{formatted.time}</span></time></td><td><span className="score-chip">{analysis.score ?? "Sin puntaje"}</span></td><td>{analysis.source === "windows-agent" ? <><strong>{analysis.coveragePercent}%</strong><span className="table-time">{analysis.attentionCount} para revisar · {analysis.unknownCount} sin determinar</span>{analysis.unknownCount !== 0 && <span className="table-time">Resultado parcial</span>}</> : <span>Sin estados ni cobertura</span>}</td></tr>;
                     })}</tbody>
                   </table>
                 </div>
@@ -125,6 +137,8 @@ export function DashboardView({ user, data }: { user: UserProfile; data: Dashboa
                 </div>
               )}
             </div>
+            {data.recentAnalyses.length > 0 && <p className="history-scope">Mostrando {data.recentAnalyses.length} de {data.totalAnalyses} análisis de tu cuenta. <Link href="/devices">Ver historial por equipo →</Link></p>}
+            {devices === null && data.recentAnalyses.some(analysis => analysis.deviceId) && <p className="input-help" role="status">No pudimos cargar los nombres y accesos de tus equipos. Actualizá la página para consultarlos.</p>}
           </section>
 
           <section className="account-section" id="mi-cuenta" aria-labelledby="account-title">
@@ -135,7 +149,7 @@ export function DashboardView({ user, data }: { user: UserProfile; data: Dashboa
             </div>
           </section>
 
-          <footer className="dashboard-footer"><span>Security Center AI</span><p>Información clara. Decisiones con evidencia.</p></footer>
+          <footer className="dashboard-footer"><span>Security Center AI</span><InformationLinks /><p>Información clara. Decisiones con evidencia.</p></footer>
         </div>
       </main>
     </div>

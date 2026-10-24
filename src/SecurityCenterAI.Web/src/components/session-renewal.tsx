@@ -14,7 +14,7 @@ function renew(): ReturnType<typeof renewSessionAction> {
   return inFlight;
 }
 
-export function SessionRenewal({ expiresAt, destination }: { expiresAt?: string; destination?: "/account" | "/dashboard" | "/devices" }) {
+export function SessionRenewal({ expiresAt, destination }: { expiresAt?: string; destination?: "/account" | "/account/activity" | "/account/sessions" | "/dashboard" | "/devices" | "/tools/scam-check" | "/getting-started" }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const running = useRef(false);

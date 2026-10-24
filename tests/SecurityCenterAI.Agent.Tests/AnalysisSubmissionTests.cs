@@ -68,6 +68,7 @@ public sealed class AnalysisSubmissionTests
     [InlineData(401)]
     [InlineData(403)]
     [InlineData(409)]
+    [InlineData(410)]
     [InlineData(413)]
     [InlineData(429)]
     [InlineData(500)]
@@ -95,6 +96,28 @@ public sealed class AnalysisSubmissionTests
         Assert.False(exception.ToString().Contains("private-response", StringComparison.Ordinal));
         Assert.False(exception.ToString().Contains("external.example.invalid", StringComparison.Ordinal));
         Assert.Null(exception.InnerException);
+    }
+
+    [Fact]
+    public async Task DeletedReport_AsksForANewLocalScanWithoutRetryingOrChangingTheReport()
+    {
+        var report = AnalysisReportSamples.Create(Now);
+        var reportId = report.ReportId;
+        var requests = 0;
+        using var handler = new CallbackHandler((_, _) =>
+        {
+            requests++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Gone)
+            { Content = new StringContent($"private-response-{Token}") });
+        });
+        using var http = new HttpClient(handler);
+        var api = new AgentApiClient(http, ApiUri, new FixedClock(Now));
+        var error = await Assert.ThrowsAsync<AgentException>(() => api.SubmitAnalysisAsync(Credential(), report, CancellationToken.None));
+        Assert.Contains("fue eliminado", error.Message);
+        Assert.Contains("Ejecutá scan", error.Message);
+        Assert.DoesNotContain(Token, error.Message);
+        Assert.Equal(1, requests);
+        Assert.Equal(reportId, report.ReportId);
     }
 
     [Theory]

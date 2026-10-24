@@ -64,6 +64,73 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                     b.ToTable("account_action_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.AnalysisFeedback", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_comentario");
+
+                    b.Property<Guid>("AnalysisId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_analisis");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("comentario");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_creacion_utc");
+
+                    b.Property<int>("ExplanationVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("version_guia");
+
+                    b.Property<string>("Rating")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("valoracion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_actualizacion_utc");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_usuario");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnalysisId");
+
+                    b.HasIndex("UserId", "AnalysisId")
+                        .IsUnique();
+
+                    b.ToTable("analysis_feedback", (string)null);
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.DeletedAnalysisReport", b =>
+                {
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_dispositivo");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_informe_agente");
+
+                    b.Property<DateTime>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_eliminacion_utc");
+
+                    b.HasKey("DeviceId", "ReportId");
+
+                    b.ToTable("deleted_analysis_reports", (string)null);
+                });
+
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.Device", b =>
                 {
                     b.Property<Guid>("Id")
@@ -217,6 +284,104 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                     b.ToTable("device_pairing_codes", (string)null);
                 });
 
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.EmailChangeRequest", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_usuario");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_concurrencia");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_creacion_utc");
+
+                    b.Property<DateTime?>("CurrentConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_confirmacion_actual_utc");
+
+                    b.Property<string>("CurrentEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("correo_actual");
+
+                    b.Property<string>("CurrentTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hash_confirmacion_actual");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_expiracion_utc");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_solicitud");
+
+                    b.Property<DateTime?>("NewConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_confirmacion_nuevo_utc");
+
+                    b.Property<string>("NewEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("correo_nuevo");
+
+                    b.Property<string>("NewTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hash_confirmacion_nuevo");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("CurrentTokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("Id")
+                        .IsUnique();
+
+                    b.HasIndex("NewTokenHash")
+                        .IsUnique();
+
+                    b.ToTable("email_change_requests", (string)null);
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.LinkMessageUsage", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_usuario");
+
+                    b.Property<int>("Checks")
+                        .HasColumnType("integer")
+                        .HasColumnName("consultas_realizadas");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_concurrencia");
+
+                    b.Property<DateOnly>("DayUtc")
+                        .HasColumnType("date")
+                        .HasColumnName("dia_utc");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("link_message_usage", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_link_message_usage_consultas", "consultas_realizadas >= 0");
+                        });
+                });
+
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.RefreshCredential", b =>
                 {
                     b.Property<Guid>("Id")
@@ -252,6 +417,38 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserSessionId");
 
                     b.ToTable("refresh_credentials", (string)null);
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.SecurityActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_evento");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tipo_evento");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_evento_utc");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_usuario");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "OccurredAtUtc", "Id")
+                        .IsDescending(false, true, true);
+
+                    b.ToTable("security_activity", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_security_activity_tipo", "tipo_evento IN ('AccountRegistered','SessionStarted','SessionRevoked','AllSessionsRevoked','RefreshReplayBlocked','EmailVerified','PasswordReset','DeviceRegistered','PairingCodeIssued','DevicePaired','DeviceRevoked','AnalysisDeleted','PasswordChanged','EmailChanged')");
+                        });
                 });
 
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.SecurityAnalysis", b =>
@@ -672,6 +869,36 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.AnalysisFeedback", b =>
+                {
+                    b.HasOne("SecurityCenterAI.Domain.Entities.SecurityAnalysis", "Analysis")
+                        .WithMany()
+                        .HasForeignKey("AnalysisId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SecurityCenterAI.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Analysis");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.DeletedAnalysisReport", b =>
+                {
+                    b.HasOne("SecurityCenterAI.Domain.Entities.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.Device", b =>
                 {
                     b.HasOne("SecurityCenterAI.Domain.Entities.User", "User")
@@ -705,6 +932,28 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Device");
                 });
 
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.EmailChangeRequest", b =>
+                {
+                    b.HasOne("SecurityCenterAI.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.LinkMessageUsage", b =>
+                {
+                    b.HasOne("SecurityCenterAI.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.RefreshCredential", b =>
                 {
                     b.HasOne("SecurityCenterAI.Domain.Entities.UserSession", "Session")
@@ -714,6 +963,18 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.SecurityActivity", b =>
+                {
+                    b.HasOne("SecurityCenterAI.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_security_activity_users_id_usuario");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.SecurityAnalysis", b =>

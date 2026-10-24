@@ -10,11 +10,40 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<RefreshCredential> RefreshCredentials => Set<RefreshCredential>();
     public DbSet<AccountActionToken> AccountActionTokens => Set<AccountActionToken>();
+    public DbSet<EmailChangeRequest> EmailChangeRequests => Set<EmailChangeRequest>();
+    public DbSet<LinkMessageUsage> LinkMessageUsage => Set<LinkMessageUsage>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<DevicePairingCode> DevicePairingCodes => Set<DevicePairingCode>();
     public DbSet<DeviceCredential> DeviceCredentials => Set<DeviceCredential>();
     public DbSet<SecurityRule> SecurityRules => Set<SecurityRule>();
     public DbSet<SecurityFinding> SecurityFindings => Set<SecurityFinding>();
+    public DbSet<AnalysisFeedback> AnalysisFeedback => Set<AnalysisFeedback>();
+    public DbSet<DeletedAnalysisReport> DeletedAnalysisReports => Set<DeletedAnalysisReport>();
+    public DbSet<SecurityActivity> SecurityActivities => Set<SecurityActivity>();
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        GuardSecurityActivity();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        GuardSecurityActivity();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void GuardSecurityActivity()
+    {
+        var removedOwners = ChangeTracker.Entries<User>().Where(entry => entry.State == EntityState.Deleted).Select(entry => entry.Entity.Id).ToHashSet();
+        foreach (var entry in ChangeTracker.Entries<SecurityActivity>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted && !removedOwners.Contains(entry.Entity.UserId))
+                throw new InvalidOperationException("La actividad de seguridad solo admite nuevas entradas o el borrado de su cuenta.");
+            if (entry.State == EntityState.Added && (entry.Entity.UserId == Guid.Empty || !Enum.IsDefined(entry.Entity.Kind) || entry.Entity.OccurredAtUtc.Kind != DateTimeKind.Utc))
+                throw new InvalidOperationException("Entrada de actividad de seguridad inválida.");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +94,39 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<LinkMessageUsage>(entity =>
+        {
+            entity.ToTable("link_message_usage", table => table.HasCheckConstraint("CK_link_message_usage_consultas", "consultas_realizadas >= 0"));
+            entity.HasKey(item => item.UserId);
+            entity.Property(item => item.UserId).HasColumnName("id_usuario");
+            entity.Property(item => item.DayUtc).HasColumnName("dia_utc");
+            entity.Property(item => item.Checks).HasColumnName("consultas_realizadas");
+            entity.Property(item => item.ConcurrencyStamp).HasColumnName("version_concurrencia").IsConcurrencyToken();
+            entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmailChangeRequest>(entity =>
+        {
+            entity.ToTable("email_change_requests");
+            entity.HasKey(x => x.UserId);
+            entity.Property(x => x.UserId).HasColumnName("id_usuario");
+            entity.Property(x => x.Id).HasColumnName("id_solicitud");
+            entity.Property(x => x.CurrentEmail).HasColumnName("correo_actual").HasMaxLength(320).IsRequired();
+            entity.Property(x => x.NewEmail).HasColumnName("correo_nuevo").HasMaxLength(320).IsRequired();
+            entity.Property(x => x.CurrentTokenHash).HasColumnName("hash_confirmacion_actual").HasMaxLength(64).IsRequired();
+            entity.Property(x => x.NewTokenHash).HasColumnName("hash_confirmacion_nuevo").HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("fecha_creacion_utc");
+            entity.Property(x => x.ExpiresAtUtc).HasColumnName("fecha_expiracion_utc");
+            entity.Property(x => x.CurrentConfirmedAtUtc).HasColumnName("fecha_confirmacion_actual_utc");
+            entity.Property(x => x.NewConfirmedAtUtc).HasColumnName("fecha_confirmacion_nuevo_utc");
+            entity.Property(x => x.ConcurrencyStamp).HasColumnName("version_concurrencia").IsConcurrencyToken();
+            entity.HasIndex(x => x.Id).IsUnique();
+            entity.HasIndex(x => x.CurrentTokenHash).IsUnique();
+            entity.HasIndex(x => x.NewTokenHash).IsUnique();
+            entity.HasIndex(x => x.ExpiresAtUtc);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SecurityAnalysis>(entity =>
         {
             entity.ToTable("security_analyses");
@@ -79,5 +141,43 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         });
         DeviceModelConfiguration.Configure(modelBuilder);
         AnalysisModelConfiguration.Configure(modelBuilder);
+        modelBuilder.Entity<DeletedAnalysisReport>(entity =>
+        {
+            entity.ToTable("deleted_analysis_reports");
+            entity.HasKey(x => new { x.DeviceId, x.ReportId });
+            entity.Property(x => x.DeviceId).HasColumnName("id_dispositivo");
+            entity.Property(x => x.ReportId).HasColumnName("id_informe_agente");
+            entity.Property(x => x.DeletedAtUtc).HasColumnName("fecha_eliminacion_utc");
+            entity.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AnalysisFeedback>(entity =>
+        {
+            entity.ToTable("analysis_feedback");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id_comentario");
+            entity.Property(x => x.UserId).HasColumnName("id_usuario");
+            entity.Property(x => x.AnalysisId).HasColumnName("id_analisis");
+            entity.Property(x => x.Rating).HasColumnName("valoracion").HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Comment).HasColumnName("comentario").HasMaxLength(1000);
+            entity.Property(x => x.ExplanationVersion).HasColumnName("version_guia");
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("fecha_creacion_utc");
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("fecha_actualizacion_utc");
+            entity.HasIndex(x => new { x.UserId, x.AnalysisId }).IsUnique();
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Analysis).WithMany().HasForeignKey(x => x.AnalysisId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<SecurityActivity>(entity =>
+        {
+            var kinds = string.Join(",", Enum.GetNames<SecurityActivityKind>().Select(kind => "'" + kind + "'"));
+            entity.ToTable("security_activity", table => table.HasCheckConstraint("CK_security_activity_tipo", $"tipo_evento IN ({kinds})"));
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).HasColumnName("id_evento");
+            entity.Property(item => item.UserId).HasColumnName("id_usuario");
+            entity.Property(item => item.Kind).HasColumnName("tipo_evento").HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.OccurredAtUtc).HasColumnName("fecha_evento_utc");
+            entity.HasIndex(item => new { item.UserId, item.OccurredAtUtc, item.Id }).IsDescending(false, true, true);
+            entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_security_activity_users_id_usuario");
+        });
     }
 }

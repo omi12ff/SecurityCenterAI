@@ -24,6 +24,7 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
 
     public async Task<AuthResponse?> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
+        NewPasswordPolicy.Require(request.Password);
         var email = request.Email.Trim().ToLowerInvariant();
         if (await database.Users.AnyAsync(user => user.Email == email, cancellationToken)) return null;
         var user = new User { Name = request.Name.Trim(), Email = email, PasswordHash = "", CreatedAtUtc = Now };
@@ -32,6 +33,7 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         var verification = await AddActionTokenAsync(user, VerificationPurpose, cancellationToken);
         user.LastVerificationSentAtUtc = Now;
         var response = AddSession(user);
+        SecurityActivityRecorder.Add(database, user.Id, SecurityActivityKind.AccountRegistered, Now);
         try { await database.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         { database.ChangeTracker.Clear(); return null; }
@@ -58,14 +60,19 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
             }
             else
             {
+                if (await database.UserSessions.CountAsync(item => item.UserId == user.Id &&
+                    item.RevokedAtUtc == null && item.ExpiresAtUtc > Now, cancellationToken) >= _settings.MaxActiveSessions)
+                    throw new DeviceOperationException(409, "Se alcanzó el límite de sesiones web de la cuenta. Cerrá una sesión o recuperá el acceso por correo.");
                 user.FailedLoginAttempts = 0;
                 user.LockoutEndUtc = null;
                 if (verification == PasswordVerificationResult.SuccessRehashNeeded) user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
                 response = AddSession(user);
+                SecurityActivityRecorder.Add(database, user.Id, SecurityActivityKind.SessionStarted, Now);
             }
             user.ConcurrencyStamp = Guid.NewGuid();
             try { await database.SaveChangesAsync(cancellationToken); return response; }
-            catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); }
+            catch (Exception exception) when (ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (OwnerRemoved(exception)) { database.ChangeTracker.Clear(); return null; }
         }
         return null;
     }
@@ -80,7 +87,7 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
                 .SingleOrDefaultAsync(item => item.TokenHash == hash, cancellationToken);
             if (credential is null) return null;
             var session = credential.Session;
-            if (credential.ConsumedAtUtc.HasValue) { await RevokeSessionAsync(session.Id, cancellationToken); return null; }
+            if (credential.ConsumedAtUtc.HasValue) { await RevokeSessionAsync(session.Id, cancellationToken, SecurityActivityKind.RefreshReplayBlocked); return null; }
             if (session.RevokedAtUtc.HasValue || session.ExpiresAtUtc <= Now || credential.ExpiresAtUtc <= Now) return null;
             credential.ConsumedAtUtc = Now;
             credential.ConcurrencyStamp = Guid.NewGuid();
@@ -90,7 +97,8 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
             database.Entry(session.User).Property(item => item.ConcurrencyStamp).IsModified = true;
             var response = AddRefreshResponse(session.User, session);
             try { await database.SaveChangesAsync(cancellationToken); return response; }
-            catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); }
+            catch (Exception exception) when (ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (OwnerRemoved(exception)) { database.ChangeTracker.Clear(); return null; }
         }
         return null;
     }
@@ -112,8 +120,10 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
             if (user is null) return;
             user.ConcurrencyStamp = Guid.NewGuid();
             await RevokeAllTrackedAsync(userId, cancellationToken);
+            SecurityActivityRecorder.Add(database, userId, SecurityActivityKind.AllSessionsRevoked, Now);
             try { await database.SaveChangesAsync(cancellationToken); return; }
-            catch (DbUpdateConcurrencyException) when (attempt < 4) { database.ChangeTracker.Clear(); }
+            catch (Exception exception) when (attempt < 4 && ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (OwnerRemoved(exception)) { database.ChangeTracker.Clear(); return; }
         }
     }
 
@@ -129,7 +139,8 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
             user.ConcurrencyStamp = Guid.NewGuid();
             var token = await AddActionTokenAsync(user, PasswordResetPurpose, cancellationToken);
             try { await database.SaveChangesAsync(cancellationToken); }
-            catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); return; }
+            catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
+            { database.ChangeTracker.Clear(); return; }
             await DeliverAsync(new AccountEmail(user.Email, token, AccountEmailPurpose.PasswordReset), cancellationToken);
         }
         finally
@@ -148,7 +159,8 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         user.ConcurrencyStamp = Guid.NewGuid();
         var token = await AddActionTokenAsync(user, VerificationPurpose, cancellationToken);
         try { await database.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); return; }
+        catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
+        { database.ChangeTracker.Clear(); return; }
         await DeliverAsync(new AccountEmail(user.Email, token, AccountEmailPurpose.EmailVerification), cancellationToken);
     }
 
@@ -160,12 +172,15 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         action.ConcurrencyStamp = Guid.NewGuid();
         action.User.EmailVerified = true;
         action.User.ConcurrencyStamp = Guid.NewGuid();
+        SecurityActivityRecorder.Add(database, action.UserId, SecurityActivityKind.EmailVerified, Now);
         try { await database.SaveChangesAsync(cancellationToken); return true; }
-        catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); return false; }
+        catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
+        { database.ChangeTracker.Clear(); return false; }
     }
 
     public async Task<bool> ResetPasswordAsync(string token, string password, CancellationToken cancellationToken)
     {
+        NewPasswordPolicy.Require(password);
         var action = await FindActionAsync(token, PasswordResetPurpose, cancellationToken);
         if (action is null) return false;
         action.User.PasswordHash = passwordHasher.HashPassword(action.User, password);
@@ -184,8 +199,14 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
             item.RevokedAtUtc == null && item.ConsumedAtUtc == null).ToListAsync(cancellationToken);
         foreach (var code in pairingCodes)
         { code.RevokedAtUtc = Now; code.ConcurrencyStamp = Guid.NewGuid(); }
-        try { await database.SaveChangesAsync(cancellationToken); return true; }
-        catch (DbUpdateConcurrencyException) { database.ChangeTracker.Clear(); return false; }
+        var emailChange = await database.EmailChangeRequests.SingleOrDefaultAsync(item => item.UserId == action.UserId, cancellationToken);
+        if (emailChange is not null) database.EmailChangeRequests.Remove(emailChange);
+        SecurityActivityRecorder.Add(database, action.UserId, SecurityActivityKind.PasswordReset, Now);
+        try { await database.SaveChangesAsync(cancellationToken); }
+        catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
+        { database.ChangeTracker.Clear(); return false; }
+        await DeliverAsync(new(action.User.Email, "", AccountEmailPurpose.PasswordResetCompleted), CancellationToken.None);
+        return true;
     }
 
     private AuthResponse AddSession(User user)
@@ -231,23 +252,42 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         foreach (var item in sessions) { item.RevokedAtUtc = Now; item.ConcurrencyStamp = Guid.NewGuid(); }
     }
 
-    private async Task RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken)
+    public Task<bool> RevokeOwnedSessionAsync(Guid userId, Guid sessionId, CancellationToken cancellationToken) =>
+        RevokeSessionAsync(sessionId, cancellationToken, ownerId: userId);
+
+    private async Task<bool> RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken,
+        SecurityActivityKind kind = SecurityActivityKind.SessionRevoked, Guid? ownerId = null)
     {
         for (var attempt = 0; ; attempt++)
         {
-            var session = await database.UserSessions.SingleOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
-            if (session is null || session.RevokedAtUtc.HasValue) return;
+            var session = await database.UserSessions.SingleOrDefaultAsync(item => item.Id == sessionId &&
+                (!ownerId.HasValue || item.UserId == ownerId.Value), cancellationToken);
+            if (session is null) return false;
+            if (session.RevokedAtUtc.HasValue || ownerId.HasValue && session.ExpiresAtUtc <= Now) return true;
             session.RevokedAtUtc = Now;
             session.ConcurrencyStamp = Guid.NewGuid();
-            try { await database.SaveChangesAsync(cancellationToken); return; }
-            catch (DbUpdateConcurrencyException) when (attempt < 4) { database.ChangeTracker.Clear(); }
+            SecurityActivityRecorder.Add(database, session.UserId, kind, Now);
+            try { await database.SaveChangesAsync(cancellationToken); return true; }
+            catch (Exception exception) when (attempt < 4 && ConcurrentWrite(exception)) { database.ChangeTracker.Clear(); }
+            catch (DbUpdateException exception) when (OwnerRemoved(exception)) { database.ChangeTracker.Clear(); return false; }
         }
     }
+
+    private static bool OwnerRemoved(DbUpdateException exception) => exception.InnerException is PostgresException
+        { SqlState: PostgresErrorCodes.ForeignKeyViolation, ConstraintName:
+            "FK_user_sessions_users_UserId" or "FK_refresh_credentials_user_sessions_UserSessionId" or "FK_account_action_tokens_users_UserId" or "FK_security_activity_users_id_usuario" };
+
+    private static bool ConcurrentWrite(Exception exception) => exception is DbUpdateConcurrencyException ||
+        exception is InvalidOperationException { InnerException: { } inner } && ConcurrentWrite(inner) ||
+        exception is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure } ||
+        exception is DbUpdateException { InnerException: PostgresException
+            { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure } };
 
     private async Task DeliverAsync(AccountEmail message, CancellationToken cancellationToken)
     {
         try { await emailSender.SendAsync(message, cancellationToken); }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
-        { logger.LogWarning("No se pudo entregar un correo de cuenta. Revisa la disponibilidad del transporte SMTP."); }
+        { logger.LogWarning(SecurityCenterAI.Api.Services.Operations.SafeOperationalLogging.EmailQueueRejected,
+            "No se pudo encolar un correo de cuenta. Revisá la disponibilidad del transporte SMTP."); }
     }
 }

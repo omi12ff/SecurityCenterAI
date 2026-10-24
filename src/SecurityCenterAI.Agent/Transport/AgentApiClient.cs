@@ -117,6 +117,7 @@ public sealed class AgentApiClient
     {
         HttpStatusCode.BadRequest => new("La API rechazó el formato o las fechas del informe. Revisá el reloj y generá uno nuevo con scan."),
         HttpStatusCode.Conflict => new("El identificador del informe ya tiene otro contenido o cambió el acceso. Generá un informe nuevo o revisá el equipo en la web."),
+        HttpStatusCode.Gone => new("Este informe fue eliminado de tu cuenta y no se volverá a cargar. Ejecutá scan para generar otro informe y decidí si querés enviarlo."),
         HttpStatusCode.RequestEntityTooLarge => new("El informe supera el límite de envío de 64 KiB."),
         HttpStatusCode.NotFound => new("La API no tiene disponible la ingesta. Iniciá la versión actualizada del backend."),
         _ => ResponseError(status)

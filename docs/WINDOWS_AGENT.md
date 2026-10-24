@@ -1,15 +1,60 @@
-# Agente Windows: consola de prueba de concepto
+# Agente Windows: consola y paquete portátil
 
-Revisión: **2026-10-21**. Los resultados de compilación y pruebas de este bloque
+Revisión: **2026-10-22**. Versión del agente: **0.4.1-preview.1**.
+Los resultados de compilación y pruebas de cada bloque
 se registran en [CHANGELOG.md](../CHANGELOG.md).
 
 Esta consola .NET 8 permite vincular la PC con el dispositivo creado en la web,
 enviar un contacto manual y ejecutar diez comprobaciones locales de solo lectura.
-`scan` conserva el informe local; `scan -Send` o `send` permiten enviarlo
+`scan` conserva el informe local; `scan --send` o `send` permiten enviarlo
 explícitamente para consultar puntos confirmados, cobertura y resultados en
-la web. No hay instalador, servicio, inicio automático, reparación ni IA.
+la web. Hay un ZIP portátil autocontenido para Windows 11 x64; no hay
+instalador, servicio, inicio automático, reparación ni IA.
 
-## Requisitos y primer uso
+## Ejecutar el paquete sin SDK
+
+Para generar y usar el ZIP, consulta el
+[recorrido de pruebas privadas](AGENT_PRIVATE_BETA.md). El destino no necesita
+SDK ni runtime .NET instalado por separado. El runtime incluido conserva sus
+archivos `DOTNET-LICENSE.txt` y `DOTNET-THIRD-PARTY-NOTICES.txt` en el paquete.
+Extrae toda la carpeta y abre
+una terminal normal en ella:
+
+```powershell
+.\SecurityCenterAI.Agent.exe version
+.\SecurityCenterAI.Agent.exe doctor
+.\SecurityCenterAI.Agent.exe scan
+```
+
+El informe permanece local. Para vincular el equipo y enviar después, con la
+API ya activa en esta misma PC:
+
+```powershell
+.\SecurityCenterAI.Agent.exe pair --api http://localhost:5169
+.\SecurityCenterAI.Agent.exe send
+```
+
+El código se solicita de forma oculta. `Iniciar-agente.cmd` muestra la ayuda y
+también acepta estos comandos; invoca el ejecutable sin PowerShell ni SDK.
+Si la política del equipo permite scripts, `Invoke-Agent.ps1 -Action menu`
+ofrece un menú manual. No solicita elevación ni modifica políticas.
+
+`version` y `--version` muestran la versión sin consultar el almacenamiento.
+`doctor` y `doctor --json` comprueban requisitos mínimos locales: Windows con
+build 22000 o posterior, sistema y proceso x64, Windows PowerShell del sistema y disponibilidad de
+una ruta absoluta de LocalAppData. No hacen solicitudes, no escriben ni leen
+credenciales o informes y no ejecutan las diez sondas. No verifican escritura,
+módulos, permisos ni protección efectiva. El diagnóstico devuelve `0` si están
+presentes los requisitos, `2` si falta alguno y `130` al cancelar; no es una
+certificación de compatibilidad o seguridad.
+
+La URL de loopback solo funciona si la API está en la PC que ejecuta el agente.
+Otra PC requiere HTTPS con certificado válido y una infraestructura todavía
+pendiente; el ZIP no publica el backend. La matriz de compatibilidad y los
+pasos de actualización, retiro y pruebas consentidas están en
+[AGENT_PRIVATE_BETA.md](AGENT_PRIVATE_BETA.md).
+
+## Desarrollo desde el repositorio
 
 Usa Windows y el SDK .NET 8 seleccionado por `global.json`, desde una terminal
 interactiva en la raíz del repositorio. No hace falta instalar PowerShell 7.
@@ -69,6 +114,10 @@ el sistema localmente no hace falta API ni cuenta vinculada.
 
 `ExecutionPolicy Bypass` se limita a cada proceso iniciado por esos comandos;
 el helper no cambia la política global ni solicita permisos de administrador.
+Esta forma corresponde a los scripts de desarrollo del repositorio en un host
+con política `Restricted`. El paquete portátil se ejecuta mediante `.exe` o
+`.cmd`, sin cambiar esa política; su wrapper PowerShell es opcional y requiere
+un entorno que ya permita ejecutarlo.
 
 ## Comandos y recuperación
 
@@ -82,6 +131,8 @@ el helper no cambia la política global ni solicita permisos de administrador.
 | `-Action scan -Send` | Guarda el informe y solicita su envío explícito a la API vinculada. Requiere credencial vigente. |
 | `-Action send` | Envía o reintenta el último informe del esquema 2 sin volver a comprobar Windows. |
 | `-Action forget` | Borra la copia local de la credencial. No revoca acceso remoto ni elimina informes. |
+| `-Action doctor` | Comprueba requisitos mínimos locales, sin red ni acceso a credenciales o informes. |
+| `-Action version` | Muestra la versión del agente sin consultar el almacenamiento. |
 | `-Action help` | Muestra ayuda de la consola. |
 
 Si tu política permite ejecutar scripts, también puedes usar
@@ -112,6 +163,12 @@ puedes generar un código nuevo para el mismo dispositivo y volver a vincularlo.
 Si el canje falla o se interrumpe después de llegar al servidor, genera otro
 código y vuelve a intentarlo: puede haberse consumido aunque no se guardara
 la respuesta local. No hay reintento automático de una operación de un uso.
+
+Si eliminaste un resultado desde la web y `send` recibe `410`, el agente indica
+que ese informe fue eliminado y pide un nuevo `scan`. Conserva la credencial
+y el archivo local, sin reintentar automáticamente.
+`scan --send` genera otro reporte y solicita explícitamente su envío; repetir
+`send` del mismo reporte eliminado no lo restaura. [Control del historial](ANALYSIS_HISTORY.md).
 
 ## Diez comprobaciones y sus límites
 
@@ -183,6 +240,12 @@ o borrado seguro de esos archivos. `forget` no los elimina; puedes borrarlos
 desde el Explorador cuando ya no los necesites. La ruta mostrada por Windows
 puede contener tu nombre de perfil y conviene ocultarla en capturas.
 
+Actualizar el paquete significa extraer una versión nueva en una carpeta
+separada, después de verificar su hash, y ejecutar allí `version` y `doctor`.
+En la misma PC y cuenta Windows se utiliza el estado existente de LocalAppData;
+no copies credenciales o informes a la carpeta del programa ni a otro usuario.
+Eliminar la carpeta del programa no revoca acceso ni borra esos datos.
+
 La API admite una URL raíz HTTPS sin usuario, ruta adicional, consulta o
 fragmento. HTTP solo se permite con `localhost`, `127.0.0.1` o `[::1]` exactos.
 El cliente no sigue redirecciones ni omite la validación de certificados;
@@ -230,5 +293,7 @@ con estas fuentes oficiales:
 - [Get-SmbServerConfiguration](https://learn.microsoft.com/en-us/powershell/module/smbshare/get-smbserverconfiguration) y [alcance de SMB1](https://learn.microsoft.com/en-us/windows-server/storage/file-server/troubleshoot/detect-enable-and-disable-smbv1-v2-v3).
 
 El recorrido manual de [ingesta y puntos confirmados](ANALYSIS_INGESTION.md)
-conecta estas comprobaciones con la web. La distribución, automatización,
-compatibilidad ampliada e IA siguen pendientes en [ROADMAP.md](../ROADMAP.md).
+conecta estas comprobaciones con la web. El paquete portátil prepara pruebas
+privadas supervisadas; la distribución externa firmada, automatización,
+compatibilidad ampliada e infraestructura externa siguen pendientes en
+[ROADMAP.md](../ROADMAP.md). Se eligieron guías locales sin IA externa.

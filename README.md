@@ -4,15 +4,61 @@ Copiloto para la seguridad, salud y mantenimiento de equipos Windows.
 El repositorio contiene una API .NET 8 con PostgreSQL y una web Next.js para
 cuentas, sesiones y dashboard con datos de la API.
 
-**Estado al 21 de octubre de 2026:** base interna **0.1** y avances hacia
-**0.5**. A cuentas y sesiones se suma el bloque de dispositivos y la base de
+**Estado al 24 de octubre de 2026:** bloques funcionales locales hacia la
+**1.0 gratuita**, con documentos públicos en borrador y publicación pendiente.
+La compatibilidad externa sigue sin validarse. A cuentas y sesiones se suma el bloque de dispositivos y la base de
 reglas y hallazgos. La consola Windows ejecuta diez comprobaciones de solo lectura
 y permite enviarlas explícitamente a la API. El servidor valida el informe,
 calcula puntos confirmados y cobertura, y la web muestra el historial del equipo.
 La validación de cada bloque se registra en [CHANGELOG.md](CHANGELOG.md).
-La beta sigue incompleta: faltan las explicaciones de IA, la distribución y
-operación del agente y los controles de producción.
+La web incorpora guías locales por comprobación y feedback privado por análisis.
+El historial permite comparar dos informes del mismo equipo, con evidencia y
+cambios de estado que distinguen mejoras observadas de nueva información.
+Desde **Entender este análisis** puedes exportar un resultado como JSON o
+eliminarlo con sus evidencias y feedback. Una marca mínima impide que el mismo
+informe eliminado vuelva a aparecer por un reintento del agente.
+En **Mi cuenta** puedes descargar un JSON con el perfil y todos los dispositivos,
+análisis, valoraciones y marcas mínimas de informes eliminados de tu cuenta.
+También puedes eliminar tu cuenta, confirmando con la contraseña actual y
+escribiendo `ELIMINAR`; esto borra sus datos activos y el acceso de los equipos.
+El mantenimiento técnico permite revisar sesiones y tokens antiguos antes de
+eliminarlos por lotes. Su ejecución automática está desactivada por defecto.
+El backup manual cifra una instantánea de PostgreSQL y comprueba su restauración
+en una base temporal antes de publicar el archivo final.
+En **Mi cuenta → Ver actividad de seguridad** podés consultar accesos completados
+y cambios de acceso registrados desde esta actualización, con filtros de acción
+y días UTC y navegación a eventos anteriores. La exportación de cuenta incluye
+toda esa actividad privada, sin aplicar los filtros de la pantalla.
+Se eligieron guías locales sin servicio de IA externo. El agente incorpora una
+distribución ZIP portátil para pruebas supervisadas. La beta sigue incompleta:
+faltan ampliar la compatibilidad comprobada y los controles de producción.
 Todavía no hay una versión pública etiquetada ni un despliegue de esta web.
+
+El [plan de cierre de la 1.0](docs/RELEASE_1_0.md) sigue la guía original y registra
+la prueba en otra PC/VM como pospuesta por el usuario. La raíz muestra una landing
+a visitantes; una sesión existente conserva su acceso al dashboard. Para verla
+durante el desarrollo, abrí `http://localhost:3000` sin sesión o en ventana privada.
+
+En **Resumen → Enlaces y mensajes** podés solicitar una revisión básica de una
+dirección HTTP/HTTPS o un mensaje, con correo verificado y 25 consultas por día
+UTC compartidas por defecto. Reglas limitadas, sin abrir el destino o guardar
+contenido/resultados; no confirma fraude o seguridad. [Uso y datos](docs/LINK_MESSAGE_CHECKS.md).
+
+En **Resumen → Primeros pasos** encontrás el progreso de tu cuenta/equipo, la
+descarga privada del agente y los pasos para vincular, analizar localmente y
+decidir si enviar. También podés abrir `http://localhost:3000/getting-started`.
+Mantené la web y la API abiertas y usá otra terminal para el agente.
+El ZIP disponible se configura en el servidor; [recorrido y configuración](docs/GETTING_STARTED.md).
+
+**Resumen → Por dónde empezar** separa las comprobaciones para revisar de los
+estados sin determinar y abre la guía de cada una. El historial identifica el
+equipo y la cobertura; los informes anteriores del equipo se despliegan por fecha.
+[Uso y límites](docs/DASHBOARD_PRIORITIES.md).
+
+La web incluye **Privacidad**, **Términos** y **Ayuda y errores** sin iniciar sesión.
+Los documentos muestran que faltan responsable, país y contacto. Ayuda permite
+preparar, copiar o descargar un reporte local; todavía no lo envía al proyecto.
+[Estado y datos](docs/PUBLIC_INFORMATION.md), [recorrido integrado](docs/RELEASE_VALIDATION.md).
 
 ## Documentación del proyecto
 
@@ -23,21 +69,68 @@ Para recordar dónde nos quedamos, empieza por [PROJECT_CONTEXT.md](PROJECT_CONT
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Visión, estado real y siguiente paso. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Componentes actuales, flujos y arquitectura prevista. |
 | [ROADMAP.md](ROADMAP.md) | Etapas, prioridades y criterios para avanzar. |
+| [Pendientes consolidados](docs/PENDING_FEATURES.md) | Funciones y controles que faltan, con etapas y decisiones pospuestas. |
+| [Cierre de la primera versión](docs/RELEASE_1_0.md) | Requisitos de la 1.0, estado local y próximos bloques de producto. |
+| [Primeros pasos y descarga](docs/GETTING_STARTED.md) | Preparación de la cuenta/equipo, acceso al ZIP y envío manual del primer análisis. |
+| [Prioridades e historial](docs/DASHBOARD_PRIORITIES.md) | Qué revisar primero, estados desconocidos y navegación entre informes. |
+| [Privacidad, términos y ayuda](docs/PUBLIC_INFORMATION.md) | Borradores, datos públicos pendientes y preparación de errores sin envío automático. |
+| [Verificación integrada 1.0](docs/RELEASE_VALIDATION.md) | Recorrido completo con cuenta y agente ficticios, alcance real y condiciones abiertas. |
+| [Enlaces y mensajes](docs/LINK_MESSAGE_CHECKS.md) | Señales limitadas, cuota diaria, datos mínimos y controles del detector básico. |
 | [DECISIONS.md](DECISIONS.md) | Decisiones técnicas y de producto con sus motivos. |
 | [SECURITY.md](SECURITY.md) | Controles actuales, pendientes y reporte de problemas. |
 | [PRIVACY_NOTES.md](PRIVACY_NOTES.md) | Datos que se guardan y límites actuales de privacidad. |
 | [CHANGELOG.md](CHANGELOG.md) | Historial de cambios y verificaciones realizadas. |
 | [Dispositivos y vinculación](docs/DEVICES.md) | Alcance, credenciales y límites del bloque de dispositivos. |
 | [Agente Windows](docs/WINDOWS_AGENT.md) | Cómo vincular la consola, realizar comprobaciones locales y proteger su credencial. |
+| [Agente portátil y prueba privada](docs/AGENT_PRIVATE_BETA.md) | Crear el ZIP con runtime incluido, comprobarlo y ejecutarlo sin SDK en el destino. |
 | [Enviar y consultar análisis](docs/ANALYSIS_INGESTION.md) | Envío manual, reintentos, puntos confirmados, cobertura y límites de la evidencia. |
+| [Guías locales y feedback](docs/LOCAL_GUIDES_AND_FEEDBACK.md) | Cómo entender un análisis y guardar una valoración privada. |
+| [Comparación de análisis](docs/ANALYSIS_COMPARISON.md) | Elegir dos informes y entender cambios, puntos, cobertura y límites. |
+| [Exportación y borrado de análisis](docs/ANALYSIS_HISTORY.md) | Descargar un resultado, eliminarlo con confirmación y entender la marca mínima y el rechazo de reenvío. |
+| [Exportar los datos de la cuenta](docs/ACCOUNT_EXPORT.md) | Descargar el perfil y todo el historial propio, incluidos equipos revocados y análisis antiguos. |
+| [Eliminar la cuenta](docs/ACCOUNT_DELETION.md) | Confirmación, datos eliminados, cierre de accesos y límites sobre archivos, correos y backups. |
+| [Mantenimiento técnico](docs/RETENTION_MAINTENANCE.md) | Vista previa y purga limitada de sesiones/tokens antiguos; configuración y pruebas aisladas. |
+| [Backups y ensayo de recuperación](docs/DATABASE_BACKUPS.md) | Copia cifrada con contraseña, comprobación en una base temporal y límites de recuperación. |
+| [Actividad de seguridad](docs/SECURITY_ACTIVITY.md) | Historial privado, filtros de acción/fechas, navegación, exportación y alcance de auditoría. |
+| [Monitoreo local](docs/OPERATIONAL_MONITORING.md) | Estado real de PostgreSQL, comando de consulta y logs mínimos con id de solicitud. |
+| [Sesiones activas](docs/ACCOUNT_SESSIONS.md) | Revisar accesos web propios y cerrar una sesión específica con confirmación. |
+| [Cambiar contraseña](docs/ACCOUNT_PASSWORD.md) | Cambio autenticado desde Mi cuenta, cierre de sesiones, actividad y aviso de correo. |
+| [Nombre del perfil](docs/ACCOUNT_PROFILE.md) | Editar el nombre y verlo actualizado en la navegación, manteniendo las sesiones. |
+| [Cambiar correo](docs/ACCOUNT_EMAIL_CHANGE.md) | Confirmar ambas direcciones, finalizar con contraseña y cerrar sesiones web. |
+| [Política de cuentas](docs/ACCOUNT_SECURITY_POLICY.md) | Contraseñas nuevas, lista local inicial y capacidad de sesiones por cuenta. |
+| [Entrega de correo](docs/MAIL_DELIVERY.md) | Reintentos acotados, diagnóstico SMTP sin envío y límites de la cola en memoria. |
+| [Verificación consolidada](docs/VERIFICATION.md) | Un comando para backend, agente y web; PostgreSQL y E2E opcionales. |
+| [Preparación de recuperación](docs/RECOVERY_RUNBOOK.md) | Procedimiento inicial, invalidación de accesos restaurados y decisiones operativas pendientes. |
 | [Guía maestra original (PDF)](docs/Guia_Maestra_Security_Center_AI_Actualizada.pdf) | Referencia del producto, versión documental 1.0 del 27 de julio de 2026. |
 
 ## Requisitos
+
+Para comprobar el avance completo local, ejecutá en otra terminal
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1 -IncludePostgres`.
+La [guía de verificación](docs/VERIFICATION.md) explica las suites y omisiones.
+
+Estos requisitos corresponden al desarrollo del repositorio. El paquete portátil
+del agente incluye .NET y se ejecuta por separado; su destino de prueba es Windows
+11 x64 y no necesita el SDK, Docker, Node.js ni el código fuente para arrancar.
 
 - .NET SDK 8.0.4xx (seleccionado por `global.json`; incluye el runtime de la API).
 - Docker Desktop con el motor WSL 2 activo y contenedores Linux.
 - PowerShell 5.1 o superior y Git.
 - Node.js 24 y npm para el frontend.
+
+Para generar el ZIP del agente desde este repositorio:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish-agent.ps1
+```
+
+Se genera en `artifacts\agent`, junto con su archivo SHA-256. Extraé el ZIP
+completo en una carpeta nueva y abrí `Iniciar-agente.cmd` para ver la ayuda, o
+ejecutá `SecurityCenterAI.Agent.exe doctor` desde esa carpeta para consultar
+requisitos básicos. La [guía de distribución](docs/AGENT_PRIVATE_BETA.md) explica
+los límites de compatibilidad, el manifiesto, la actualización y la prueba supervisada.
+El parámetro de política se aplica solo al proceso de desarrollo que crea el ZIP;
+el ejecutable y el archivo `.cmd` distribuidos no necesitan cambiar políticas.
 
 Extensiones de VS Code: **C#**, **C# Dev Kit** y **Container Tools**
 (`ms-azuretools.vscode-containers`). Para el frontend: **ESLint**
@@ -98,9 +191,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Action mi
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Action test
 ```
 
-Las 82 pruebas del backend usan una base en memoria y correo de prueba, sin Docker
+Las pruebas habituales del backend usan una base en memoria y correo de prueba, sin Docker
 ni `.env`. Comprueban autenticación, tokens, autorización y aislamiento del
-dashboard. La solución incorpora además las pruebas específicas del agente
+dashboard. Las tres pruebas PostgreSQL de retención se omiten en esa corrida;
+`scripts/test-retention.ps1` las ejecuta en una base temporal con datos ficticios.
+Las tres de backups se ejecutan aparte con `scripts/test-backup.ps1`, también
+con datos ficticios. `scripts/test-security-activity.ps1` ejecuta tres ensayos
+aislados de atomicidad, cascadas y concurrencia del historial de seguridad.
+El [backup manual](docs/DATABASE_BACKUPS.md) se crea con:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\backup.ps1
+```
+
+Pide una contraseña de copia en la terminal y escribe en
+`%LOCALAPPDATA%\SecurityCenterAI\Backups`, fuera del repositorio y de OneDrive.
+No sustituye la base activa ni configura programación o copias remotas.
+
+La solución incorpora además las pruebas específicas del agente
 Windows, descritas en [su guía](docs/WINDOWS_AGENT.md#comprobar-el-agente).
 La suite E2E del frontend utiliza PostgreSQL y correo local reales,
 como se describe abajo. Los resultados concretos están en
@@ -155,6 +263,12 @@ o revocar una sesión invalida también sus JWT. La renovación rota el refresh
 token; reutilizar uno anterior revoca esa sesión. `/account` permite consultar
 el estado del correo y cerrar todos los accesos, incluido el actual. Todavía
 no hay un listado de sesiones ni revocación individual desde esa pantalla.
+
+En **Mi cuenta → Descargar datos de mi cuenta**, **Exportar mi cuenta (JSON)**
+descarga el perfil, todos los dispositivos e informes, feedback y marcas mínimas
+propios. Incluye equipos revocados y registros antiguos sin dispositivo. El
+archivo contiene nombre/correo y evidencias en texto claro; revisa su contenido
+antes de compartirlo. [Contenido y exclusiones](docs/ACCOUNT_EXPORT.md).
 
 ## Correo de desarrollo y recuperación
 
@@ -223,6 +337,18 @@ la cobertura y los desconocidos. No es una certificación de seguridad del PC.
 Los reintentos conservan el mismo identificador para no duplicar el historial.
 Detalles, datos enviados y recuperación: [guía de ingesta](docs/ANALYSIS_INGESTION.md).
 
+Para exportar o eliminar un resultado, abre **Ver equipo e historial → Entender
+este análisis** y busca **Control de este análisis** al pie. **Exportar análisis
+(JSON)** descarga una copia; para borrar, marca **Confirmo que quiero eliminar
+este análisis** y pulsa **Eliminar análisis**. Se eliminan el resultado, sus
+evidencias y feedback de la aplicación, conservando los otros análisis y el
+acceso del equipo. No se borran informes de tu PC, descargas o backups.
+
+El agente actual es **0.4.1-preview.1**. Si `send` recibe `410` porque ese informe
+ya se eliminó, solicita un nuevo `scan`; conserva credencial y archivo local.
+La marca mínima del identificador y fecha no tiene purga automática mientras
+exista el dispositivo. [Alcance y contrato](docs/ANALYSIS_HISTORY.md).
+
 ## Comprobar la aplicación
 
 Para comprobar el frontend desde la raíz:
@@ -238,6 +364,12 @@ desde una copia recién instalada. `test` ejecuta pruebas unitarias sin
 servidores. `build` genera la compilación que sirve
 `npm.cmd --prefix src/SecurityCenterAI.Web start`. Estos comandos no
 publican el sitio; el despliegue y TLS de producción siguen pendientes.
+
+Para compilar una instancia de verificación sin compartir `.next` con el servidor
+de desarrollo, define `$env:SECURITY_CENTER_WEB_QA='1'` en su terminal. Tanto
+`build` como `start` usarán `.next-qa`, excluido de Git. Configura en esa misma
+terminal `API_BASE_URL` y un puerto de web distinto si usas una API de pruebas.
+La terminal habitual de desarrollo conserva su configuración.
 
 Para ejecutar las pruebas E2E con **backend, frontend, PostgreSQL y Mailpit
 activos**, abre una tercera terminal desde la raíz:
@@ -295,6 +427,9 @@ Dentro de la conexión, abre `Schemas > public > Tables`. Encontrarás `users`,
 El bloque de dispositivos añade `devices`, `device_pairing_codes`,
 `device_credentials`, `security_rules` y `security_findings`, y la columna
 opcional `security_analyses.id_dispositivo`.
+Los bloques posteriores agregan `analysis_feedback` y `deleted_analysis_reports`;
+esta última conserva solo dispositivo, identificador del informe eliminado y
+fecha UTC para impedir que el mismo envío restaure un resultado borrado.
 Para ver registros, usa el menú
 contextual de una tabla: `View Data > All Rows`.
 
@@ -350,7 +485,8 @@ los mapeos nuevos: detenla con `Ctrl+C` y vuelve a ejecutar `scripts/dev.ps1`.
   traducción planificada y se conserva en el changelog. «Database is already up
   to date» solo informa del historial de migraciones; no repara cambios manuales.
 - Si Swagger no responde, ejecuta el script de inicio y revisa su salida.
-  `/health` confirma que la API responde; no verifica la conexión con PostgreSQL.
+  `/health` confirma que la API responde; `/health/ready` consulta PostgreSQL.
+  Para revisar ambos: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\status.ps1`.
 - Si el puerto ya está ocupado o hay binarios bloqueados por otra API, identifica
   la instancia que necesitas conservar. El helper reconoce la API de este
   proyecto y permite reiniciarla con `-Restart`. Para otra instancia paralela,
@@ -374,12 +510,17 @@ los mapeos nuevos: detenla con `Ctrl+C` y vuelve a ejecutar `scripts/dev.ps1`.
 | `POST /api/auth/logout` | Refresh opaco en el cuerpo: revoca su sesión. |
 | `POST /api/auth/logout-all` | Bearer: revoca todas las sesiones de la cuenta. |
 | `GET /api/auth/me` | Bearer: perfil y estado de correo actuales. |
+| `GET /api/account/sessions` | Bearer: sesiones activas propias, 50 por página e indicación de la actual. |
+| `POST /api/account/sessions/{id}/revoke` | Bearer y confirmación: cierra solo la sesión propia seleccionada. |
+| `POST /api/account/password` | Bearer, contraseña actual/nueva y confirmación: cambia la clave y cierra todas las sesiones web. |
+| `POST /api/account/profile/name` | Bearer: actualiza solo el nombre del propietario; mantiene otros datos y accesos. |
 | `POST /api/auth/resend-verification` | Bearer: solicita otro enlace, sujeto a espera y límites. |
 | `POST /api/auth/verify-email` | Token de correo en el cuerpo: confirma dirección. |
 | `POST /api/auth/forgot-password` | Público: solicita enlace con respuesta genérica. |
 | `POST /api/auth/reset-password` | Token y nueva contraseña: consume enlace y revoca sesiones. |
 | `GET /api/dashboard` | Bearer: análisis guardados propios. |
 | `GET /health` | Público: respuesta fija de salud HTTP. |
+| `GET /health/ready` | Público y limitado: consulta PostgreSQL; 200 disponible o 503 sin detalles de conexión. |
 
 Las rutas de dispositivos y los endpoints del agente están
 documentados en [docs/DEVICES.md](docs/DEVICES.md#contrato-http). El detalle

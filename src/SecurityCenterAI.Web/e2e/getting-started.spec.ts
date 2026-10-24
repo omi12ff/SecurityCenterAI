@@ -1,0 +1,74 @@
+import { createHash } from "node:crypto";
+import { test, expect, loginAccount } from "./fixtures.ts";
+import { accountApi, registerApi } from "./api.ts";
+import { createDevice, heartbeat, pairDevice, registerVerifiedOwner } from "./device-api.ts";
+import { submitReport, syntheticReport } from "./analysis-api.ts";
+
+test("la guía y la descarga requieren sesión; un correo pendiente no puede descargar", async ({ page, account }) => {
+  await page.goto("/getting-started"); await expect(page).toHaveURL(/\/login\?/);
+  const anonymous = await page.request.get("/getting-started/agent/download", { maxRedirects: 0 });
+  expect(anonymous.status()).toBe(307); expect(anonymous.headers()["location"]).toContain("/login");
+  await registerApi(account); await loginAccount(page, account);
+  await page.getByRole("link", { name: "Empezar con mi equipo", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Verificá tu correo", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Descargar agente Windows (ZIP)", exact: true })).toHaveCount(0);
+  const denied = await page.request.get("/getting-started/agent/download");
+  expect(denied.status()).toBe(403); expect(await denied.text()).not.toContain("AGENT_PACKAGE_PATH");
+  const progress = page.getByRole("list", { name: "Progreso de la preparación" });
+  await expect(progress.getByText("Confirmado", { exact: true })).toHaveCount(0);
+  await expect(progress.getByText("Pendiente", { exact: true })).toHaveCount(4);
+});
+
+test("la guía avanza con datos propios, distingue heartbeat de análisis y conserva el historial al revocar", async ({ page, account, newAccount }) => {
+  test.setTimeout(90_000);
+  const owner = await registerVerifiedOwner(account); await loginAccount(page, account);
+  const navigation = await page.goto("/getting-started");
+  expect(navigation?.headers()["cache-control"]).toContain("no-store"); expect(navigation?.headers()["referrer-policy"]).toBe("no-referrer");
+  await expect(page.getByRole("heading", { name: "Registrá tu equipo", exact: true })).toBeVisible();
+  const other = await registerVerifiedOwner(newAccount());
+  const otherDevice = await createDevice(other.accessToken, "Otro equipo privado");
+  await pairDevice(otherDevice.pairingCode);
+  await page.getByRole("link", { name: "Registrar mi equipo", exact: true }).click();
+  await page.getByLabel("Nombre del equipo", { exact: true }).fill("Equipo de primeros pasos");
+  await page.getByRole("button", { name: "Agregar equipo", exact: true }).click();
+  const code = await page.getByLabel("Código de vinculación", { exact: true }).inputValue();
+  await page.goto("/getting-started");
+  await expect(page.getByRole("heading", { name: "Vinculá tu equipo con el agente", exact: true })).toBeVisible();
+  await expect(page.getByRole("main")).not.toContainText(code);
+  await expect(page.getByRole("main")).not.toContainText("Otro equipo privado");
+  const credential = await pairDevice(code); expect((await heartbeat(credential.deviceToken)).status).toBe(204);
+  await page.getByRole("button", { name: "Actualizar progreso", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Enviá tu primer análisis", exact: true })).toBeVisible();
+  const progress = page.getByRole("list", { name: "Progreso de la preparación" });
+  await expect(progress.getByText("Confirmado", { exact: true })).toHaveCount(3);
+  expect((await submitReport(credential.deviceToken, syntheticReport({ "WIN-BITLOCKER-SYSTEM": "unknown" }))).status).toBe(201);
+  await page.getByRole("button", { name: "Actualizar progreso", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Tu primer análisis ya está disponible", exact: true })).toBeVisible();
+  await expect(progress.getByText("Confirmado", { exact: true })).toHaveCount(4);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.getByText("Comprobar la integridad del ZIP", { exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("link", { name: "Entender mi análisis", exact: true }).click();
+  await expect(page.getByRole("main")).toContainText("Qué significa cada comprobación");
+  expect((await accountApi(`/api/devices/${credential.deviceId}/revoke`, { token: owner.accessToken, body: {} })).status).toBe(204);
+  await page.goto("/getting-started");
+  await expect(page.getByRole("heading", { name: "Registrá tu equipo", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Entender mi análisis", exact: true })).toHaveCount(0);
+  await page.goto(`/devices/${credential.deviceId}`); await expect(page.getByRole("main")).toContainText("Análisis del equipo");
+});
+
+test("el ZIP descargado coincide con el SHA-256 mostrado y rechaza rutas suministradas por el navegador", async ({ page, account }) => {
+  const owner = await registerVerifiedOwner(account); await loginAccount(page, account); await page.goto("/getting-started");
+  await page.getByText("Comprobar la integridad del ZIP", { exact: true }).click();
+  const checksum = await page.locator(".setup-hash code").innerText();
+  const response = await page.request.get("/getting-started/agent/download");
+  expect(response.status()).toBe(200); expect(response.headers()["content-type"]).toBe("application/zip");
+  expect(response.headers()["content-disposition"]).toMatch(/^attachment; filename="SecurityCenterAI\.Agent-[0-9A-Za-z.-]+-win-x64\.zip"$/);
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  expect(createHash("sha256").update(await response.body()).digest("hex")).toBe(checksum);
+  const injected = await page.request.get("/getting-started/agent/download?path=../../.env");
+  expect(injected.status()).toBe(400); expect(await injected.text()).not.toContain("JWT_KEY");
+  expect((await accountApi("/api/auth/logout-all", { token: owner.accessToken, body: {} })).status).toBe(204);
+  const revoked = await page.request.get("/getting-started/agent/download", { maxRedirects: 0 });
+  expect(revoked.status()).toBe(307); expect(revoked.headers()["location"]).toContain("/session/renew");
+});

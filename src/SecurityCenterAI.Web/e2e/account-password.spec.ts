@@ -1,0 +1,54 @@
+import { randomBytes } from 'node:crypto';
+import { test, expect, loginAccount } from './fixtures.ts';
+import { registerVerifiedOwner } from './device-api.ts';
+import { accountApi } from './api.ts';
+import { waitForPasswordChangeNotice } from './mailpit.ts';
+
+test('cambiar contraseña exige la actual, cierra accesos y envía un aviso sin secretos', async ({ page, account }) => {
+  test.setTimeout(90_000);
+  const owner = await registerVerifiedOwner(account);
+  await loginAccount(page, account);
+  await page.goto('/account');
+  const form = page.getByRole('form', { name: 'Cambiar contraseña', exact: true });
+  const replacement = randomBytes(24).toString('base64url');
+  await form.getByLabel('Contraseña actual', { exact: true }).fill('incorrecta');
+  await form.getByLabel('Contraseña nueva', { exact: true }).fill(replacement);
+  await form.getByLabel('Repetí la contraseña nueva', { exact: true }).fill(replacement);
+  await form.getByRole('checkbox').check();
+  await form.getByRole('button', { name: 'Guardar contraseña nueva', exact: true }).click();
+  await expect(form.getByRole('alert').filter({ hasText: 'No pudimos confirmar tu contraseña actual.' })).toBeVisible();
+  expect((await accountApi('/api/auth/me', { token: owner.accessToken })).status).toBe(200);
+  await form.getByLabel('Contraseña actual', { exact: true }).fill(account.password);
+  await form.getByLabel('Contraseña nueva', { exact: true }).fill(replacement);
+  await form.getByLabel('Repetí la contraseña nueva', { exact: true }).fill(replacement);
+  await form.getByRole('checkbox').check();
+  await form.getByRole('button', { name: 'Guardar contraseña nueva', exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?reason=password-changed$/);
+  await expect(page.getByText('Tu contraseña se actualizó y se cerraron las sesiones web. Iniciá sesión con la nueva contraseña.', { exact: true })).toBeVisible();
+  const cookies = await page.context().cookies();
+  expect(cookies.filter(cookie => ['security_center_session', 'security_center_refresh'].includes(cookie.name))).toHaveLength(0);
+  expect((await accountApi('/api/auth/me', { token: owner.accessToken })).status).toBe(401);
+  expect((await accountApi('/api/auth/refresh', { body: { refreshToken: owner.refreshToken } })).status).toBe(401);
+  const notice = await waitForPasswordChangeNotice(account.email);
+  for (const value of [account.password, replacement, owner.accessToken, owner.refreshToken, 'http://', 'https://']) expect(notice.includes(value)).toBe(false);
+  expect(notice.includes('Se cambió la contraseña')).toBe(true);
+  await loginAccount(page, { ...account, password: replacement });
+  await page.goto('/account/activity');
+  await expect(page.getByText('Contraseña cambiada desde Mi cuenta', { exact: true })).toBeVisible();
+});
+
+test('el formulario móvil confirma coincidencia y cierre sin modificar la cuenta ante errores', async ({ page, account }) => {
+  await registerVerifiedOwner(account); await loginAccount(page, account);
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto('/account');
+  const form = page.getByRole('form', { name: 'Cambiar contraseña', exact: true });
+  await form.getByLabel('Contraseña actual', { exact: true }).fill(account.password);
+  await form.getByLabel('Contraseña nueva', { exact: true }).fill('Nuevo valor ficticio A');
+  await form.getByLabel('Repetí la contraseña nueva', { exact: true }).fill('Nuevo valor ficticio B');
+  await form.getByRole('checkbox').check();
+  await form.getByRole('button', { name: 'Guardar contraseña nueva', exact: true }).click();
+  await expect(form.getByText('Las contraseñas nuevas deben coincidir.', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.goto('/account/sessions');
+  await expect(page.getByRole('heading', { name: 'Sesión actual', exact: true })).toBeVisible();
+});

@@ -5,7 +5,7 @@ namespace SecurityCenterAI.Api.Contracts;
 public sealed record RegisterRequest(
     [Required, StringLength(100, MinimumLength = 2)] string Name,
     [Required, EmailAddress, MaxLength(320)] string Email,
-    [Required, StringLength(128, MinimumLength = 8)] string Password);
+    [Required, StringLength(128, MinimumLength = 15)] string Password);
 
 public sealed record LoginRequest(
     [Required, EmailAddress, MaxLength(320)] string Email,
@@ -23,5 +23,5 @@ public sealed record RefreshRequest([Required, StringLength(256, MinimumLength =
 public sealed record ForgotPasswordRequest([Required, EmailAddress, MaxLength(320)] string Email);
 public sealed record ResetPasswordRequest(
     [Required, MaxLength(256)] string Token,
-    [Required, StringLength(128, MinimumLength = 8)] string Password);
+    [Required, StringLength(128, MinimumLength = 15)] string Password);
 public sealed record VerifyEmailRequest([Required, MaxLength(256)] string Token);

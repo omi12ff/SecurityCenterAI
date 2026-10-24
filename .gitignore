@@ -9,8 +9,12 @@ appsettings.Local.json
 *.suo
 **/node_modules/
 **/.next/
+**/.next-qa/
 **/.env.local
 **/.env.*.local
 **/*.tsbuildinfo
 **/playwright-report/
 **/test-results/
+artifacts/
+**/*.scaibackup
+**/*.scaibackup.partial

@@ -5,6 +5,7 @@ import { ApiError, authenticate, refreshAuth, revokeSession, revokeAllSessions, 
 import type { AuthFormState } from "@/lib/contracts";
 import { createSession, deleteSession, readRefreshToken, requireSession } from "@/lib/session";
 import { validateCredentials } from "@/lib/validation";
+import { validNewPasswordLength, NEW_PASSWORD_HELP } from "@/lib/new-password";
 
 async function submitCredentials(mode: "login" | "register", formData: FormData): Promise<AuthFormState> {
   const validation = validateCredentials(mode, formData);
@@ -79,11 +80,14 @@ export async function forgotPasswordAction(_previous: AuthFormState, formData: F
 export async function resetPasswordAction(_previous: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const token = text(formData, "token");
   const password = text(formData, "password");
-  if (password.length < 8 || password.length > 128) return { fieldErrors: { password: "Usá entre 8 y 128 caracteres." } };
+  if (!validNewPasswordLength(password)) return { fieldErrors: { password: NEW_PASSWORD_HELP } };
   if (password !== text(formData, "confirmPassword")) return { fieldErrors: { confirmPassword: "Las contraseñas deben coincidir." } };
   if (!/^[A-Za-z0-9_-]{43,512}$/.test(token)) return { message: "El enlace no es válido o ya venció. Solicitá uno nuevo." };
   try { await resetPassword(token, password); }
-  catch (error) { return actionError(error, "El enlace no es válido o ya venció. Solicitá uno nuevo."); }
+  catch (error) {
+    if (error instanceof ApiError && error.fieldErrors?.password) return { fieldErrors: error.fieldErrors };
+    return actionError(error, "El enlace no es válido o ya venció. Solicitá uno nuevo.");
+  }
   // El restablecimiento revoca todas las sesiones; no inicia sesión automáticamente.
   await deleteSession();
   return { success: true, message: "Tu contraseña se actualizó. Iniciá sesión con la nueva contraseña." };

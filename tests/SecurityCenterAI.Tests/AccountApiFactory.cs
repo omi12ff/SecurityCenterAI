@@ -18,7 +18,8 @@ using SecurityCenterAI.Infrastructure.Persistence;
 namespace SecurityCenterAI.Tests;
 
 internal sealed class AccountApiFactory(int authPermitLimit = 1000, int globalPermitLimit = 2000,
-    int agentPairPermitLimit = 1000, int devicePermitLimit = 1000, int analysisPermitLimit = 1000)
+    int agentPairPermitLimit = 1000, int devicePermitLimit = 1000, int analysisPermitLimit = 1000, int accountExportPermitLimit = 1000,
+    int accountDeletionPermitLimit = 1000, string? postgresConnection = null, int accountPasswordPermitLimit = 1000, int maxActiveSessions = 10, int emailChangePermitLimit = 1000, int linkMessageDailyLimit = 25)
     : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = Guid.NewGuid().ToString();
@@ -38,13 +39,30 @@ internal sealed class AccountApiFactory(int authPermitLimit = 1000, int globalPe
                 ["RateLimits:GlobalPermitLimit"] = globalPermitLimit.ToString(),
                 ["RateLimits:AgentPairPermitLimit"] = agentPairPermitLimit.ToString(),
                 ["RateLimits:DevicePermitLimit"] = devicePermitLimit.ToString(),
-                ["RateLimits:AnalysisPermitLimit"] = analysisPermitLimit.ToString()
+                ["RateLimits:AnalysisPermitLimit"] = analysisPermitLimit.ToString(),
+                ["RateLimits:AccountExportPermitLimit"] = accountExportPermitLimit.ToString(),
+                ["RateLimits:AccountDeletionPermitLimit"] = accountDeletionPermitLimit.ToString(),
+                ["RateLimits:AccountPasswordPermitLimit"] = accountPasswordPermitLimit.ToString(),
+                ["AuthSecurity:MaxActiveSessions"] = maxActiveSessions.ToString(),
+                ["RateLimits:AccountEmailChangePermitLimit"] = emailChangePermitLimit.ToString(),
+                ["LinkMessageChecks:DailyLimit"] = linkMessageDailyLimit.ToString()
             }));
         builder.ConfigureLogging(logging => logging.ClearProviders());
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();
-            services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+            services.AddDbContext<AppDbContext>(options =>
+            {
+                if (postgresConnection is null) options.UseInMemoryDatabase(_databaseName);
+                else
+                {
+                    var parsed = new Npgsql.NpgsqlConnectionStringBuilder(postgresConnection) { Pooling = false };
+                    if (parsed.Host != "127.0.0.1" || parsed.Port != 5432 ||
+                        !System.Text.RegularExpressions.Regex.IsMatch(parsed.Database ?? "", "^scai_audit_test_[a-f0-9]{32}$"))
+                        throw new InvalidOperationException("Refused a PostgreSQL database outside the isolated audit namespace.");
+                    options.UseNpgsql(parsed.ConnectionString);
+                }
+            });
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
             services.RemoveAll<IAccountEmailSender>();
@@ -91,11 +109,13 @@ internal sealed class TestClock : TimeProvider
 
 internal sealed class CapturedAccountEmailSender : IAccountEmailSender
 {
+    public AccountEmailPurpose? RejectedPurpose { get; set; }
     private readonly ConcurrentQueue<AccountEmail> _messages = new();
     public AccountEmail[] Messages => _messages.ToArray();
 
     public Task SendAsync(AccountEmail message, CancellationToken cancellationToken)
     {
+        if (message.Purpose == RejectedPurpose) throw new InvalidOperationException("Fictitious email transport failure.");
         _messages.Enqueue(message);
         return Task.CompletedTask;
     }

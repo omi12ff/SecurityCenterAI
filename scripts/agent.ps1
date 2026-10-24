@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('pair', 'heartbeat', 'status', 'scan', 'send', 'forget', 'help')]
+    [ValidateSet('pair', 'heartbeat', 'status', 'scan', 'send', 'forget', 'help', 'doctor', 'version')]
     [string]$Action = 'help',
     [string]$ApiUrl = 'http://localhost:5169',
     [switch]$Replace,

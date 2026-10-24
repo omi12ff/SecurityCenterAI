@@ -13,13 +13,13 @@ export async function readRefreshToken(): Promise<string | null> {
   return token && /^[A-Za-z0-9_-]{43,512}$/.test(token) ? token : null;
 }
 
-export async function requireSession(returnTo: "/account" | "/dashboard" | "/devices"): Promise<SessionToken> {
+export async function requireSession(returnTo: "/account" | "/account/activity" | "/account/sessions" | "/dashboard" | "/devices" | "/tools/scam-check" | "/getting-started"): Promise<SessionToken> {
   const session = await readSession();
   if (session) return session;
   return redirectToRenewal(returnTo);
 }
 
-export async function redirectToRenewal(returnTo: "/account" | "/dashboard" | "/devices"): Promise<never> {
+export async function redirectToRenewal(returnTo: "/account" | "/account/activity" | "/account/sessions" | "/dashboard" | "/devices" | "/tools/scam-check" | "/getting-started"): Promise<never> {
   if (await readRefreshToken()) redirect(`/session/renew?next=${encodeURIComponent(returnTo)}`);
   redirect("/login?reason=session-expired");
 }

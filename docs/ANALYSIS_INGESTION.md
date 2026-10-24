@@ -137,12 +137,18 @@ Cada observación debe pertenecer al intervalo del escaneo, con cinco segundos
 de margen. Un informe demasiado antiguo requiere un escaneo nuevo. Los límites
 de solicitudes están en memoria y no constituyen una cuota distribuida.
 
-El primer envío devuelve `201`; el reintento idéntico, `200` con
+El primer envío devuelve `201`; el reintento idéntico no eliminado, `200` con
 `alreadyReceived=true`. La respuesta incluye `analysisId`, `reportId`, puntaje
 opcional, cobertura porcentual, los cuatro conteos, `scoringVersion=1` y fecha
 de recepción. Datos inválidos producen `400`, falta de autorización `401`,
 conflicto de identificador `409`, exceso de cuerpo `413` y límite de solicitudes
 `429`.
+
+Si el propietario eliminó ese reporte del historial, una marca mínima de
+dispositivo/reporte/fecha impide recrearlo y la API devuelve `410` para el mismo
+identificador. El agente `0.4.1-preview.1` pide un escaneo nuevo, conserva
+credencial e informe local y no reintenta automáticamente. No edites el reporte
+eliminado para cambiar su identidad. [Exportación y borrado](ANALYSIS_HISTORY.md).
 
 Si no hay respuesta por un fallo de red, el análisis puede haberse guardado.
 Reintenta con `send`, sin ejecutar otro `scan` solo para recuperar la respuesta.

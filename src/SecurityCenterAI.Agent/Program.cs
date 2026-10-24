@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text.Json;
 using SecurityCenterAI.Agent.Checks;
 using SecurityCenterAI.Agent.Security;
 using SecurityCenterAI.Agent.Transport;
@@ -6,7 +8,8 @@ namespace SecurityCenterAI.Agent;
 
 public static class Program
 {
-    public const string AgentVersion = "0.3.0-poc.1";
+    public static string AgentVersion { get; } = typeof(Program).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
 
     public static async Task<int> Main(string[] args)
     {
@@ -20,11 +23,24 @@ public static class Program
                 PrintHelp();
                 return 0;
             }
-            if (!OperatingSystem.IsWindows()) throw new AgentException("Este agente solo funciona en Windows.");
+            if (args is ["version"] or ["--version"])
+            {
+                Console.WriteLine(AgentVersion);
+                return 0;
+            }
             var command = ParseArguments(args);
+            // Diagnostics must remain independent of user data and the vault lock.
+            if (command.Action == "doctor")
+            {
+                var diagnostics = AgentDiagnostics.Capture(AgentVersion);
+                if (command.Json) Console.WriteLine(JsonSerializer.Serialize(diagnostics, new JsonSerializerOptions
+                { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true }));
+                else AgentDiagnostics.Print(diagnostics, Console.Out);
+                return diagnostics.BasicRequirementsAvailable ? 0 : 2;
+            }
+            if (!OperatingSystem.IsWindows()) throw new AgentException("Este agente solo funciona en Windows.");
             var clock = TimeProvider.System;
-            var storage = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SecurityCenterAI", "Agent");
+            var storage = AgentStorageDirectory.Resolve(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
             var vault = new CredentialVault(storage, clock);
             using var operationLock = vault.AcquireLock();
             var ct = cancellation.Token;
@@ -106,6 +122,8 @@ public static class Program
     private static AgentCommand ParseArguments(string[] args)
     {
         var action = args[0];
+        if (args is ["doctor"]) return new AgentCommand(action);
+        if (args is ["doctor", "--json"]) return new AgentCommand(action, Json: true);
         if (action == "scan" && args is ["scan", "--send"]) return new AgentCommand(action, Send: true);
         if (action is "scan" or "send" or "status" or "heartbeat" or "forget" && args.Length == 1)
             return new AgentCommand(action);
@@ -163,7 +181,7 @@ public static class Program
 
     private static AgentException Unpaired() => new("No hay credencial local. Registrá el equipo en la web y usá pair con un código nuevo.");
     private static AgentException UsageError() => new("Comando u opciones inválidas. Usá help; el código de vinculación nunca se pasa como argumento.");
-    private sealed record AgentCommand(string Action, string? ApiUrl = null, bool Replace = false, bool Send = false);
+    private sealed record AgentCommand(string Action, string? ApiUrl = null, bool Replace = false, bool Send = false, bool Json = false);
 
     private static async Task SendReportAsync(DeviceCredential credential, AgentReport report, TimeProvider clock,
         CancellationToken cancellationToken)
@@ -186,6 +204,8 @@ public static class Program
         Console.WriteLine("scan [--send]                Comprueba Windows, guarda JSON y opcionalmente lo envía.");
         Console.WriteLine("send                         Envía el último informe compatible; reintentar no lo duplica.");
         Console.WriteLine("forget                       Elimina solo la credencial local; revocá desde la web.");
+        Console.WriteLine("doctor [--json]              Diagnóstico local básico sin leer credenciales ni ejecutar scan.");
+        Console.WriteLine("version                      Muestra la versión del agente; también admite --version.");
         Console.WriteLine("help                         Muestra esta ayuda.");
         Console.WriteLine("Uso manual. El envío requiere send o scan --send. No instala servicios ni corrige configuraciones.");
     }

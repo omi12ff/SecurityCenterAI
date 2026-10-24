@@ -1,6 +1,6 @@
 # Arquitectura de Security Center AI
 
-Estado documentado: **2026-10-21**. La guía maestra v1.0 del 27 de julio de
+Estado documentado: **2026-10-22**. La guía maestra v1.0 del 27 de julio de
 2026 define el objetivo del producto. Esta arquitectura distingue el código
 actual de las funciones futuras; las pruebas realizadas están en
 [CHANGELOG.md](CHANGELOG.md).
@@ -82,9 +82,11 @@ backend. La web local se abre en `http://localhost:3000`.
 
 ## Autenticación y sesiones
 
-Las contraseñas usan `PasswordHasher<User>`; el contrato actual admite de
-8 a 128 caracteres para registro y recuperación. Se normaliza el correo y su
-índice es único. No hay MFA ni una lista de contraseñas comprometidas.
+Las contraseñas usan `PasswordHasher<User>`; el contrato actual exige
+15 puntos Unicode como mínimo y 128 unidades UTF-16 como máximo para claves
+nuevas en registro y recuperación, además de la lista local inicial de valores
+previsibles. Login conserva compatibilidad con claves anteriores. Se normaliza el correo y su
+índice es único. No hay MFA ni un corpus amplio de contraseñas comprometidas.
 
 El access token usa HMAC SHA-256, emisor, audiencia, expiración y los claims de
 usuario y sesión. Su vigencia configurada es de 15 minutos, con 30 segundos
@@ -95,8 +97,9 @@ revocada, vencida o ajena al usuario invalida el token aunque su firma sea váli
 Los refresh son opacos, aleatorios y se guardan como SHA-256. Se rotan y tienen
 una vigencia máxima de 30 días. Las credenciales consumidas se conservan para
 detectar reutilización: volver a presentar una revoca la sesión asociada.
-Los marcadores de concurrencia protegen las actualizaciones; no hay purga
-automática de registros vencidos o consumidos.
+Los marcadores de concurrencia protegen las actualizaciones. El mantenimiento
+técnico opcional elimina sesiones cerradas antiguas con sus refresh en cascada;
+conserva todos los hashes mientras la sesión siga activa. Está desactivado por defecto.
 
 Logout solicita revocación y borra las cookies del navegador. Si la API no
 responde, la web informa del cierre local: una copia del token puede seguir
@@ -220,6 +223,11 @@ de forma coordinada; un reintento no crea otro historial. Las fechas declaradas
 se conservan separadas de la recepción del servidor. La credencial se comprueba
 en la base y no autoriza después de su revocación o vencimiento.
 
+Después de eliminar un análisis con `reportId`, la marca mínima del dispositivo
+y reporte prevalece sobre el reintento: la ingesta devuelve `410` y no restaura
+ese identificador. La versión `0.4.1-preview.1` de la consola pide un escaneo nuevo
+sin borrar la credencial o el archivo local y sin reintento automático.
+
 El cálculo versión 1 suma pesos de resultados `passed` sobre el peso aplicable.
 `attention` no suma puntos y cuenta como conocido; `unknown` no suma puntos ni
 se etiqueta como riesgo comprobado; `notApplicable` se excluye del denominador.
@@ -247,6 +255,8 @@ consulta Windows remotamente. Las limitaciones y el protocolo preciso están en
 | `DeviceCredential` / `device_credentials` | Hash de credencial y vigencia; índice parcial de una credencial no revocada por dispositivo. |
 | `SecurityRule` / `security_rules` | Clave compuesta de id y versión positiva, título, descripción y creación. Catálogo del servidor para las diez reglas admitidas; sin comandos remotos. |
 | `SecurityFinding` / `security_findings` | Análisis, versión de regla, estado explícito y metadatos/evidencia/recomendación como instantáneas. Referencia compuesta a regla con borrado restringido. |
+| `AnalysisFeedback` / `analysis_feedback` | Valoración privada por usuario/análisis, comentario, versión de guía y fechas. Se elimina junto con el análisis. |
+| `DeletedAnalysisReport` / `deleted_analysis_reports` | Clave compuesta dispositivo/reporte y fecha de eliminación. Impide reingesta del mismo identificador; sin hash, puntos o evidencia. FK a dispositivo con cascada, sin purga automática. |
 
 Las once propiedades persistidas de `User` se mapean con `HasColumnName` a
 columnas en español en `users`: identificador `id_usuario`, perfil
@@ -261,8 +271,8 @@ El `Up` de `20261021120952_RenameUserColumnsToSpanish` ejecuta once operaciones
 `RenameColumn` y un `RenameIndex` para `IX_users_correo_electronico`.
 Su `Down` restaura los nombres anteriores; no recrea tablas o columnas.
 
-Las relaciones dependen del usuario y tienen borrado en cascada. Esto no
-implementa un endpoint para eliminar la cuenta. El inventario exacto, cookies,
+Las relaciones dependen del usuario y tienen borrado en cascada. El endpoint
+de eliminación de cuenta descrito abajo utiliza esas relaciones. El inventario exacto, cookies,
 correo y retención están en [PRIVACY_NOTES.md](PRIVACY_NOTES.md).
 
 La migración `20261021114159_AccountSessionsAndRecovery` agrega seis columnas
@@ -339,6 +349,382 @@ fuera del alcance aprobado.
 La sesión de cuenta no sustituye la credencial de dispositivo. Las recomendaciones
 ejecutables y la auditoría completa siguen pendientes; las diez reglas y la
 consulta de instantáneas no implementan esos procesos.
-Tampoco están elegidos proveedor de IA, empaquetado del agente, colas ni hosting.
-Retención, borrado, backups y operación de producción siguen pendientes.
+No se integró un proveedor de IA; colas y hosting de producción siguen pendientes.
+La conservación de contenido, operación de copias y producción siguen pendientes.
+Existe backup manual cifrado con ensayo aislado, descrito abajo.
+Existe mantenimiento técnico opcional de autenticación, descrito abajo.
+El control individual de análisis se describe abajo.
 Las decisiones se conservan en [DECISIONS.md](DECISIONS.md).
+
+## Guías locales y feedback implementados
+
+La web consulta un análisis por propietario/dispositivo/UUID. La API selecciona
+plantillas v1 por regla, versión y estado sin enviar evidencia a modelos externos.
+PostgreSQL conserva una valoración privada por usuario/análisis en `analysis_feedback`.
+El índice único y los reintentos protegen primeros envíos concurrentes; las
+ediciones posteriores reemplazan la valoración. El acceso usa sesión Bearer y
+mantiene el historial de dispositivos revocados.
+[Contrato y límites](docs/LOCAL_GUIDES_AND_FEEDBACK.md).
+
+## Distribución portátil del agente
+
+`scripts/publish-agent.ps1` publica exclusivamente la consola para `win-x64`,
+con runtime incluido y sin trimming ni bundling de archivo único. El ZIP contiene
+binarios, ayuda offline, acceso `.cmd`, wrapper opcional y manifiesto de integridad.
+No incorpora la API, configuración `.env`, credenciales ni informes locales.
+`doctor` y `version` se resuelven antes del almacenamiento del usuario; el resto
+conserva la ruta fija y DPAPI existentes. La operación es manual y las
+actualizaciones reemplazan una carpeta completa; sin servicio, autoarranque o
+actualizador. [Uso y compatibilidad comprobada](docs/AGENT_PRIVATE_BETA.md).
+
+## Comparación de análisis
+
+Una consulta Bearer verifica dispositivo y dos análisis del mismo propietario.
+La API carga hasta cien comprobaciones por informe sin tracking y une sus reglas,
+manteniendo originales y clasificando diferencias de estado por versiones admitidas.
+Los puntos y la cobertura se comparan solo con catálogo completo y mismo conjunto
+aplicable; los desconocidos conservan su incertidumbre. No se persisten
+comparaciones ni se ejecutan acciones en Windows. La web selecciona informes
+mediante GET y muestra evidencias originales. [Contrato](docs/ANALYSIS_COMPARISON.md).
+
+## Exportación y borrado individual del historial
+
+`AnalysisHistoryController` y `AnalysisHistoryService` verifican usuario,
+dispositivo y análisis con Bearer exclusivo de cuenta. `GET .../export` genera
+un adjunto JSON versión 1 mediante DTO explícitos: fecha del servidor,
+identificador/nombre del dispositivo, análisis completo con resultados y feedback
+propio. No agrega datos de cuenta, secretos o hashes internos; no aplica los
+límites de presentación del historial. La respuesta usa `no-store` y `nosniff`.
+
+`DELETE /api/devices/{deviceId}/analyses/{analysisId}` exige
+`{ "confirmed": true }`, rechaza campos adicionales y acota el cuerpo a 1 KiB.
+En una transacción elimina el análisis, todos sus resultados y todo su feedback;
+si tenía reporte, guarda solo dispositivo, reporte y fecha UTC. Los marcadores
+de concurrencia de usuario y dispositivo coordinan ingesta y borrado, con
+reintentos acotados de la transacción ante conflictos. Un envío concurrente no
+debe recrear el identificador eliminado. El catálogo de reglas se conserva.
+
+`20261022194730_PrivateAnalysisHistory` agrega la tabla de esas tres columnas
+en español; no modifica filas anteriores en `Up`. La marca dura mientras exista
+el dispositivo y su FK la elimina ante borrado físico, no ante revocación.
+Los análisis anteriores sin `ReportId` se borran sin marca cuando pertenecen a
+un dispositivo accesible. Esto no implementa eliminación de cuenta/dispositivo.
+
+La web presenta **Control de este análisis** al pie de la explicación. La descarga
+se transmite desde una ruta autenticada y la eliminación exige checkbox y Server
+Action; luego vuelve al historial con un aviso. Los registros restantes determinan
+dashboard y comparaciones posteriores. Archivos locales, descargas y backups
+quedan fuera de la operación. [Contrato y uso](docs/ANALYSIS_HISTORY.md).
+
+## Exportación de datos de cuenta
+
+`GET /api/account/export` requiere sesión Bearer y obtiene el usuario del claim
+autenticado. DTO explícitos agrupan perfil, todos los dispositivos propios,
+análisis con todos sus resultados y feedback, y marcas mínimas de eliminación.
+Los registros antiguos sin dispositivo se conservan con `deviceId: null`.
+Las tablas internas de autenticación y hashes no forman parte de esta copia.
+
+El servicio realiza consultas `AsNoTracking` en serie y una transacción
+`RepeatableRead` en PostgreSQL. Las colecciones se leen completas y se relacionan
+en memoria, sin aplicar los límites de presentación del historial. La respuesta
+se serializa como adjunto JSON después de la lectura; no se guarda un archivo
+de exportación ni se modifica el esquema. El coste de memoria de historiales
+grandes requiere revisión antes de una operación externa.
+
+Next.js ofrece la descarga en `/account/export` desde **Mi cuenta**. Valida y
+reconstruye el contrato antes de entregarlo al navegador, conservando el Bearer
+en el servidor. `AccountExport` limita las solicitudes por IP; `/account` y sus
+rutas tienen `no-store` y `no-referrer`. [Contrato](docs/ACCOUNT_EXPORT.md).
+
+## Eliminación de cuenta
+
+`DELETE /api/account` obtiene usuario y sesión del Bearer y exige contraseña
+actual más `ELIMINAR`. `AccountDeletionService` usa una transacción y un bloqueo
+`FOR UPDATE` parametrizado de la fila de usuario antes de revalidar sesión y
+contraseña. Los intentos fallidos comparten el bloqueo de login; una confirmación
+incorrecta no modifica ese contador. La política `AccountDeletion` limita las
+solicitudes por IP y el cuerpo admite hasta 2 KiB sin campos extra.
+
+El borrado de usuario utiliza las cascadas existentes de PostgreSQL para quitar
+datos activos, dispositivos y accesos, sin modificar el catálogo. No requiere
+migración. Los conflictos/deadlocks se reintentan de forma acotada. Ingesta,
+login y refresh tratan los conflictos y referencias a propietarios eliminados
+sin aceptar nuevos datos bajo la identidad anterior.
+
+La Server Action limpia las cookies tras un `204` y redirige al login con aviso.
+Los archivos locales, correos, colas y backups quedan fuera de la transacción;
+una cuenta registrada nuevamente obtiene otro UUID. [Alcance](docs/ACCOUNT_DELETION.md).
+
+## Mantenimiento técnico de autenticación
+
+`RetentionMaintenanceService` consulta o elimina sesiones cerradas, tokens de
+cuenta, códigos de vinculación y credenciales de dispositivos que superan su
+plazo. No elimina refresh por separado: las cascadas se aplican solo al quitar
+una sesión cerrada antigua. Perfil, dispositivos, informes y marcas mínimas
+quedan fuera de sus consultas de purga. No modifica el esquema.
+
+La vista previa usa `RepeatableRead`. La aplicación usa `ReadCommitted`, bloqueo
+asesor transaccional compartido y un lote por categoría; revalida el predicado
+en `ExecuteDeleteAsync`. Cuatro categorías se confirman en una sola transacción
+con reintentos acotados ante deadlock/serialización. Los conteos devueltos no
+incluyen dependientes borrados por cascada.
+
+El CLI se detecta antes de construir la aplicación web. Crea únicamente el host
+de configuración/DI y no lo inicia: no configura JWT, HTTP ni el worker de correo.
+`scripts/retention.ps1` proporciona la conexión local sin secretos en argumentos.
+La aplicación exige confirmación explícita y habilitación en ese proceso.
+
+En la API, `RetentionWorker` usa un ámbito por ejecución y espera un intervalo
+completo antes de la primera. `Retention:Enabled=false` por defecto impide abrir
+ámbitos para ese trabajo. Sus logs agregan estado/conteos sin datos de identidad;
+no sustituyen auditoría durable. [Opciones, uso y límites](docs/RETENTION_MAINTENANCE.md).
+
+## Backup local y ensayo aislado
+
+`--backup-*` se procesa antes de construir la aplicación web. El helper
+`scripts/backup.ps1` compila en otra configuración, prepara la conexión únicamente
+para el hijo y envía la contraseña por stdin, sin argumentos o archivo de claves.
+No inicia HTTP, correo, workers ni migraciones sobre la base habitual.
+
+`DatabaseBackupService` exporta una instantánea en una transacción de lectura
+`RepeatableRead`. El inventario SHA-256 de tablas públicas, columnas, índices y
+restricciones y `pg_dump --snapshot` leen esa misma instantánea. La representación
+de CHECK se normaliza mediante EXPLAIN sin ANALYZE para conservar su comparación
+después de los cambios textuales equivalentes que realiza PostgreSQL al restaurar.
+
+El manifiesto y dump custom se cifran con AES-256-GCM, sal/nonce aleatorios y clave
+PBKDF2-SHA256. Límite local de 64 MiB y buffers en memoria; no se escribe dump en
+claro. El archivo parcial ya está cifrado. La carpeta dedicada de LocalAppData
+recibe ACL para usuario actual y SYSTEM, sin herencia. No se permiten OneDrive,
+repositorio, uniones o directorios ajenos al almacén de copias.
+
+Antes de publicar el archivo, el servicio lo abre y autentica, crea únicamente
+`scai_restore_test_<UUID>`, restaura con `--single-transaction --exit-on-error`,
+compara el inventario y retira esa base en `finally`. Una verificación posterior
+puede funcionar aunque no exista la base original. No hay parámetro de destino
+activo. [Formato, comandos, pruebas y alcance](docs/DATABASE_BACKUPS.md).
+
+## Revisión de enlaces/mensajes para 1.0
+
+`LocalScamRules` valida entradas acotadas y aplica reglas locales versionadas;
+regex sin backtracking y sin cliente HTTP, DNS o proveedor externo. Solo devuelve
+observaciones fijas y dominios/IP, sin entradas completas, rutas o parámetros.
+No determina fraude/seguridad o confianza probabilística.
+
+`LinkMessageService` coordina una cuota combinada de 25/día UTC por defecto mediante
+`IOptions<LinkMessageOptions>`. Bloquea el usuario, revalida sesión/correo, lee o
+crea su único `LinkMessageUsage` y confirma contador/versión juntos. El siguiente
+día sustituye el anterior. No se conserva historial de contenidos o resultados.
+`GET/POST /api/tools/link-message` usan Bearer y límites existentes, cuerpos
+acotados y cabeceras privadas. La credencial Device no autoriza esta herramienta.
+
+Una fila por usuario, cuatro columnas en español, contador no negativo y cascada
+de cuenta. La exportación añade metadatos día/cantidad; el backup incluye el
+estado. Downgrade bloqueado con filas para no descartar cuotas sin un plan.
+No agrega tipos a actividad o analítica de producto.
+
+La web `/tools/scam-check` muestra contador, confirmación, errores y observaciones,
+con límites visibles y texto sin enlaces de destino clicables. Limpiar/editar
+oculta resultados anteriores y el contenido no se agrega a URLs o estado devuelto
+por las acciones. El destino de renovación de sesión entra en la lista cerrada.
+[Contrato y privacidad](docs/LINK_MESSAGE_CHECKS.md).
+
+## Presentación de visitantes
+
+La raíz muestra landing para visitantes: registro/login, recorrido, datos y FAQ.
+Una cookie de sesión válida conserva redirección al dashboard; un refresh existente
+pasa por la renovación anterior. La landing no consulta filas de PostgreSQL ni
+agrega analítica, recursos externos o servicios nuevos. Mantiene noindex mientras
+la publicación siga pendiente. [Cierre 1.0](docs/RELEASE_1_0.md).
+
+## Actividad privada de seguridad
+
+`SecurityActivity` mantiene cuatro campos: UUID de entrada, propietario, tipo
+cerrado y fecha UTC. `SecurityActivityRecorder` solo agrega una entidad al contexto;
+el `SaveChanges` y la transacción de la operación confirman ambos juntos. Se
+instrumentan catorce acciones de cuenta, sesiones, dispositivos y borrado de análisis.
+No hay texto libre, direcciones IP, secretos o identificadores del contenido.
+
+`AppDbContext` rechaza cambios o borrados de entradas existentes
+salvo al eliminar la cuenta. El catálogo se valida también mediante CHECK;
+la FK elimina las entradas al borrar el propietario. Los reintentos descartan
+el seguimiento para evitar eventos de escrituras que no se confirmaron. Los
+conflictos con borrado de cuenta se manejan en las rutas de autenticación/dispositivo.
+
+`GET /api/account/security-activity` exige JWT de sesión activa y obtiene el dueño
+del claim; comparte `DeviceAccount`. Materializa hasta 51 filas con índice por propietario,
+fecha y UUID descendentes y devuelve hasta 50 más `hasMore`/`nextBefore`. El
+cursor resuelve el último evento dentro del propietario y filtros, y continúa
+por fecha/UUID menores, sin offset. Acción opcional del catálogo y días completos
+UTC con formato estricto; fechas invertidas, parámetros repetidos y cursores
+inexistentes/ajenos/fuera de filtros producen 400. No modifica datos o índices.
+Cada evento conserva un DTO con tres campos públicos. No hay rutas de escritura de historial. La exportación de cuenta
+agrega todas las entradas a su instantánea mediante el campo aditivo `securityActivity`.
+
+La web ofrece `/account/activity` desde Mi cuenta, con estados vacío/error,
+fechas en America/Asuncion, etiquetas fijas, filtros de días UTC y navegación hacia
+eventos anteriores. La exportación de cuenta siempre conserva toda la actividad.
+Los enlaces incluyen solo filtros validados; consultas inválidas y fallos no
+parecen un historial vacío. Next excluye esta ruta del log entrante de desarrollo.
+Renovación de
+sesión admite ese destino mediante una lista cerrada de rutas locales.
+
+Es un primer registro persistido por cuenta, sin monitoreo de intentos fallidos,
+alertas o protección frente a SQL directo/administradores. No hay purga automática
+de estos eventos. [Cobertura, privacidad y pruebas](docs/SECURITY_ACTIVITY.md).
+
+## Monitoreo local y logs mínimos
+
+`/health` conserva respuesta HTTP fija. `/health/ready` usa health checks de ASP.NET
+con `PostgresReadinessCheck`: conexión Npgsql y SELECT 1, sin acceder a filas o
+aplicar migraciones, con cancelación/tiempos de tres segundos. JSON público mínimo
+200/503 sin excepción o descripción del proveedor; límite de 30/minuto además del
+global. No verifica esquema, todas las operaciones o entrega SMTP.
+
+`OperationalRequestMiddleware` envuelve el pipeline, genera X-Request-Id y
+maneja excepciones con problema genérico. Solo registra plantilla de endpoint,
+método cerrado, estado, duración, id y código de fallo. No usa texto de petición,
+excepción o scopes. Respuestas iniciadas se abortan si fallan posteriormente.
+`SafeOperationalLogging` fija una lista cerrada de categorías y consola JSON sin
+scopes; bloquea logs de framework/proveedor aunque la configuración pida Trace.
+Se mantienen avisos mínimos de cola/SMTP y conteos de mantenimiento.
+
+`scripts/status.ps1` consulta ambas rutas de localhost sin iniciar o modificar
+servicios. El inicio sobre una instancia existente informa también readiness.
+No hay archivos, colector, métricas durables o alertas. [Operación y alcance](docs/OPERATIONAL_MONITORING.md).
+
+## Inventario y cierre individual de sesiones
+
+`AccountSessionService` consulta las sesiones propias activas con proyección de
+id, creación, vencimiento y bandera de sesión actual. Ordena primero la sesión
+del claim validado, después fecha/UUID, y obtiene 51 filas por página para devolver
+50 más `hasMore`, sin contar o devolver credenciales. Página válida entre 1 y
+10000. La paginación refleja cambios entre consultas, sin instantánea persistente.
+
+`AccountSessionsController` exige Bearer, `DeviceAccount` y propietario del claim.
+El POST de hasta 1 KiB exige confirmación y filtra el dueño en cada intento de
+revocación. `AccountService` comparte la rutina de revocación con logout/replay:
+actualiza versión, fecha y evento mínimo en una sola escritura/transacción.
+Repeticiones no agregan eventos. Invalida JWT y refresh, sin revocar equipos.
+
+La web incorpora `/account/sessions`, formularios por entrada y paginación.
+El servidor de Next valida la selección y confirmación; solo borra cookies si la
+API confirma que se cerró la sesión que autorizó la operación. La renovación
+incluye este destino en la lista cerrada existente. No agrega campos de entorno
+o migraciones. [Contrato y límites](docs/ACCOUNT_SESSIONS.md).
+
+## Cambio autenticado de contraseña
+
+`AccountPasswordService` sigue el bloqueo de usuario y revalidación de sesión
+del borrado de cuenta. Usa el contador/bloqueo compartido para contraseña actual
+incorrecta. Actualiza hash y versión del usuario, revoca sesiones y consume tokens
+de recuperación pendientes; guarda `PasswordChanged` en el mismo commit. No
+modifica credenciales del agente o verificación. Conflictos tienen reintentos acotados.
+
+POST Bearer de hasta 2 KiB con confirmación y política `AccountPassword` de cinco
+solicitudes/minuto/IP. El aviso de correo es posterior al commit y no lleva token,
+contraseña o enlace; cola de memoria y fallo de mejor esfuerzo. Su único log nuevo
+es un mensaje fijo de fallo de encolado en una categoría revisada.
+
+Mi cuenta presenta formulario con repetición y confirmación. El servidor de Next
+no devuelve secretos al estado de error; tras 204 borra cookies y redirige al login.
+La migración amplía únicamente el CHECK del catálogo a trece eventos. Parser web
+y mapeo/exportación admiten `password.changed` sin cambiar el formato.
+[Contrato, política actual y límites](docs/ACCOUNT_PASSWORD.md).
+
+## Cambio de correo electrónico
+
+El correo tiene ahora un flujo separado, descrito en
+[Cambio de correo](docs/ACCOUNT_EMAIL_CHANGE.md). Una fila de solicitud por usuario
+guarda correos y hashes de dos tokens separados. Request y complete revalidan
+contraseña; confirmaciones públicas solo marcan su dirección y no cambian el
+perfil. Las mutaciones bloquean el usuario y coordinan versiones con sesiones,
+contraseña y borrado. Finalizar confirma correo, revocación web, consumo de enlaces,
+borrado de solicitud y evento mínimo juntos. Los agentes conservan su acceso.
+Reset y cambio de contraseña invalidan la solicitud; recuperación añade aviso
+posterior de mejor esfuerzo. Exportación agrega metadatos sin hashes y el
+mantenimiento técnico agrega la categoría `emailChanges`. No hay outbox durable.
+
+## Edición del nombre del perfil
+
+`AccountProfileService` bloquea el usuario y revalida la sesión antes de modificar
+únicamente nombre y versión. El POST `/api/account/profile/name` exige Bearer,
+comparte `DeviceAccount` y limita el cuerpo a 2 KiB; DTO de un campo. Recorta los
+extremos, exige 2–100 caracteres y rechaza controles. Reintenta conflictos
+acotadamente; el mismo nombre normalizado no genera escritura.
+
+La acción de Next valida y revalida Mi cuenta/dashboard/Dispositivos. No toca
+cookies o credenciales. Dashboard consulta perfil y análisis en paralelo y deja
+de mostrar el nombre del claim; Dispositivos ya usaba el perfil guardado. Otros
+navegadores reflejan cambios en su siguiente carga, aunque su JWT sea anterior.
+No agrega campos o migraciones, envía correo ni amplía el catálogo de actividad.
+[Uso y límites](docs/ACCOUNT_PROFILE.md).
+
+## Prioridades e historial en la web
+
+El dashboard conserva su contrato de cinco resúmenes y total. La página Next.js
+consulta además los equipos propios y la explicación del último informe exacto,
+en paralelo. Compara identidad de análisis/informe antes de construir una
+proyección de id, regla, título y severidad. Separa attention de unknown y no
+recalcula puntos; un detalle inaccesible no se interpreta como ausencia de problemas.
+Los resultados adicionales nunca sustituyen la autorización de la API.
+Los enlaces de la tarjeta al detalle del equipo cargan un documento nuevo para
+consultar el historial actual después de envíos realizados fuera del navegador.
+
+Las guías incorporan anclas por hallazgo. El historial del dispositivo usa details
+nativo, con un componente mínimo que abre el informe indicado por hash y conserva
+los enlaces anteriores. No agrega persistencia o modifica los límites de consulta.
+[Recorrido](docs/DASHBOARD_PRIORITIES.md).
+
+## Primeros pasos y descarga del agente
+
+La ruta privada `/getting-started` combina lecturas del perfil, lista de equipos
+y detalle del equipo no revocado. Deriva el progreso sin persistir una segunda
+fuente de estado. No considera un heartbeat o una descarga como análisis recibido.
+Los enlaces del dashboard y Dispositivos llevan a la misma guía.
+
+El servidor Next.js selecciona un ZIP mediante `AGENT_PACKAGE_PATH`, fuera de
+`public`. La descarga revalida sesión y correo mediante la API, comprueba nombre,
+tamaño y SHA-256 del checksum contiguo y entrega el mismo descriptor por streaming.
+`AGENT_API_URL` define el origen visible en el comando de vinculación; no expone
+automáticamente la dirección interna `API_BASE_URL`. No hay llamadas del navegador
+al sistema operativo, nuevas entidades o cambios de API. [Detalle](docs/GETTING_STARTED.md).
+
+## Información pública y preparación local de errores
+
+`/privacy`, `/terms` y `/report-problem` son páginas accesibles sin sesión. Las
+dos primeras describen el estado local y sus datos pendientes; registro ofrece
+enlaces informativos sin registrar aceptación contractual. Comparten navegación
+de información con los layouts existentes, sin consultar el perfil para mostrarse.
+
+El formulario de errores es un componente cliente con validación pura de campos
+y límites. Genera un objeto de estructura cerrada y fecha UTC; copiar/descargar
+requiere una acción del usuario. No hay Server Action, endpoint, envío o tabla
+para reportes. Editar invalida la revisión previa y la confirmación. Los controles
+carecen de `name` y preparar permanece deshabilitado hasta la hidratación.
+El texto libre se muestra como texto; no se añaden archivos o metadatos privados.
+[Estado, controles y límites](docs/PUBLIC_INFORMATION.md).
+
+La prueba integrada recorre las funciones con cuenta y protocolo de agente
+ficticios. Comprueba contratos de datos y navegación sin ejecutar el agente o
+leer su estado personal. [Alcance](docs/RELEASE_VALIDATION.md).
+
+## Política de cuentas y transporte de correo
+
+`NewPasswordPolicy` se ejecuta antes de registrar o reemplazar un hash: mínimo
+de 15 puntos Unicode, máximo histórico de 128 unidades UTF-16 y lista local
+inicial sin consulta externa. Login y comprobaciones de contraseña actual no
+aplican esa política a claves anteriores. La web ofrece longitud y mensajes
+fijos; la API decide la lista. No modifica esquemas o hashes existentes.
+
+Login correcto cuenta sesiones habilitadas antes de crear otra, con máximo diez
+configurable. Cambia la versión del usuario al confirmar la nueva sesión y
+reintenta si otro login gana esa versión. El inventario devuelve el máximo para
+la interfaz. Refresh conserva la sesión y no vuelve a crearla por este límite.
+
+La cola contiene `PendingAccountEmail` con fecha de entrada y material de envío
+en memoria. `IAccountEmailTransport` separa SMTP del emisor de cola y permite
+simular fallos. El worker usa intentos/esperas acotados, descarte por antigüedad y
+cancelación; no persiste destinatarios o tokens nuevos en PostgreSQL. Los logs
+solo agregan el código de reintento y número de intento. El diagnóstico local
+NOOP vive en PowerShell, fuera del readiness HTTP de PostgreSQL.

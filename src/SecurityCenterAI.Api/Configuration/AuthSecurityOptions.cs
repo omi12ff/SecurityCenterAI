@@ -9,4 +9,6 @@ public sealed class AuthSecurityOptions
     public int MaxFailedLoginAttempts { get; init; } = 5;
     public int LockoutMinutes { get; init; } = 15;
     public int EmailCooldownSeconds { get; init; } = 60;
+    public int MaxActiveSessions { get; init; } = 10;
+    public int EmailChangeMinutes { get; init; } = 30;
 }

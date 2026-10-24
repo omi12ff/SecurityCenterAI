@@ -1,0 +1,140 @@
+Security Center AI - Agente Windows portátil
+Preparación de pruebas privadas supervisadas. No es un lanzamiento público.
+
+ANTES DE EMPEZAR
+
+Verificá el SHA-256 del ZIP con el valor informado por quien preparó la prueba.
+Extraé toda la carpeta: el .exe necesita las DLL y demás archivos incluidos.
+El paquete incluye el runtime .NET 8; no requiere instalar SDK, runtime, Docker
+ni Node.js en el equipo que solo ejecuta el agente. Para actualizar el runtime
+incluido se debe generar y distribuir una versión nueva del paquete.
+DOTNET-LICENSE.txt y DOTNET-THIRD-PARTY-NOTICES.txt conservan la licencia y los
+avisos de terceros del runtime .NET distribuido; mantenelos junto al paquete.
+
+El objetivo inicial es Windows 11 x64 con Windows PowerShell del sistema.
+El anfitrión de desarrollo identificado es Windows 11 Home Single Language,
+26H2, build 26300.9711, x64, con SDK instalado. No representa otras ediciones,
+ARM64, Windows 10, Windows Server ni un equipo limpio sin SDK. Los resultados
+realmente comprobados están en el CHANGELOG del repositorio.
+
+Usá una terminal normal en la carpeta extraída. No solicita permisos de
+administrador, no instala servicios y no se inicia junto con Windows.
+El ejecutable de esta etapa no tiene firma de editor ni reputación establecida.
+Si Windows o tu organización lo bloquean, detené la prueba y consultá al
+responsable; no desactives Defender, SmartScreen ni políticas para continuar.
+El hash permite comparar el contenido con un valor confiable; no es una firma.
+
+COMANDOS PRINCIPALES
+
+  .\SecurityCenterAI.Agent.exe version
+  .\SecurityCenterAI.Agent.exe doctor
+  .\SecurityCenterAI.Agent.exe doctor --json
+  .\SecurityCenterAI.Agent.exe scan
+
+version también acepta --version y no consulta el almacenamiento.
+doctor revisa requisitos mínimos: build de Windows, arquitectura x64 del
+sistema y proceso, presencia de PowerShell y ubicación absoluta de LocalAppData.
+No usa red, no escribe, no lee credenciales o informes y no ejecuta las diez
+comprobaciones. Tampoco verifica módulos, permisos, escritura ni estado de
+seguridad. Salida 0: requisitos presentes; 2: falta alguno; 130: cancelado.
+Un doctor correcto no certifica compatibilidad completa ni una PC segura.
+
+scan realiza diez consultas de solo lectura y guarda un JSON local. No envía
+ese informe. Puede informar Desconocido si faltan permisos, módulos o datos;
+no lo interpretes como una protección desactivada ni como una aprobación.
+No cambia BIOS, TPM, cifrado, firewall, antivirus ni Windows Update.
+
+Iniciar-agente.cmd muestra la ayuda si lo abrís sin argumentos. También acepta:
+
+  .\Iniciar-agente.cmd doctor
+  .\Iniciar-agente.cmd scan
+
+El .cmd ejecuta directamente el programa, sin PowerShell ni SDK. Si tu política
+permite scripts, .\Invoke-Agent.ps1 -Action menu ofrece un menú manual.
+El wrapper también admite -Action scan, doctor, version, status, pair, heartbeat,
+send, scan-send, forget y help. No modifica las políticas de ejecución.
+
+VINCULACIÓN Y ENVÍO OPCIONALES
+
+Para usar la API y la web deben estar preparadas por separado. En tu entorno
+local, mantenelas activas en sus terminales y abrí Dispositivos en la web.
+Generá un código para el equipo y, desde otra terminal, ejecutá:
+
+  .\SecurityCenterAI.Agent.exe pair --api http://localhost:5169
+
+El código se pega únicamente en la entrada oculta del programa. No lo pases
+como argumento, no lo compartas ni lo incluyas en capturas. La consola no pide
+la contraseña de tu cuenta. Si ya hay una credencial, pair --replace permite
+sustituirla con un código nuevo; revisá antes qué dispositivo vincula ese código.
+
+  .\SecurityCenterAI.Agent.exe status
+  .\SecurityCenterAI.Agent.exe heartbeat
+
+status muestra estado local, no vigencia remota. heartbeat confirma contacto
+con la API y no envía un análisis. Para enviar explícitamente el último informe:
+
+  .\SecurityCenterAI.Agent.exe send
+
+Para comprobar y enviar en una misma acción explícita:
+
+  .\SecurityCenterAI.Agent.exe scan --send
+
+Reintentar el mismo informe no duplica el historial. En la web abrí Ver equipo
+e historial y Entender este análisis para ver evidencia, guías y feedback privado.
+No hay análisis ni envíos automáticos en segundo plano.
+
+En Control de este análisis podés exportar un JSON o confirmar su eliminación
+de la aplicación. El borrado quita el análisis, sus evidencias y su valoración;
+no elimina archivos de esta PC, descargas ni copias de seguridad. Se conserva
+una marca mínima del dispositivo, identificador del informe y fecha de borrado
+para impedir que el mismo informe vuelva a cargarse mediante un reintento.
+Si send informa que el reporte fue eliminado (HTTP 410), ejecutá scan para
+generar otro informe y decidí si querés enviarlo. La credencial sigue vigente;
+no hace falta volver a vincular el equipo ni modificar el JSON eliminado.
+
+localhost apunta a la PC donde ejecutás este programa. En otra PC no alcanza
+tu servidor de desarrollo. Los destinos fuera de loopback requieren HTTPS
+con certificado válido; esa infraestructura externa todavía está pendiente.
+Sin API podés usar doctor y scan localmente, sin cuenta ni vinculación.
+
+DATOS, ACTUALIZACIÓN Y RETIRO
+
+El estado queda en %LOCALAPPDATA%\SecurityCenterAI\Agent, separado del programa:
+
+  credential.enc        Credencial protegida con DPAPI para el usuario Windows.
+  reports\scan-*.json    Resultados y evidencia seleccionada en texto claro.
+
+No copies credenciales o informes dentro del ZIP, a otros usuarios ni equipos.
+DPAPI no protege frente a procesos que ya controlan la misma sesión Windows.
+Los informes revelan estados de seguridad: revisalos antes de compartirlos.
+Las rutas de consola pueden mostrar tu nombre de perfil Windows.
+
+Para actualizar, terminá las operaciones, verificá el ZIP nuevo y extraelo en
+una carpeta nueva. Ejecutá version y doctor sin mezclar archivos de versiones.
+En la misma PC y cuenta Windows se utiliza el estado existente de LocalAppData;
+no es necesario copiarlo. Un usuario o equipo distinto necesita su vinculación.
+
+Para retirar realmente el acceso, usá Revocar acceso en la web. Después:
+
+  .\SecurityCenterAI.Agent.exe forget
+
+forget elimina solo la credencial local: no revoca otras copias ni borra
+informes. Quitar la carpeta del programa tampoco borra el estado de LocalAppData.
+Los informes se revisan y eliminan manualmente; no hay purga automática.
+El historial y feedback de la web no se eliminan con estas acciones.
+
+PARA REGISTRAR UNA PRUEBA
+
+Acordá alcance y envío con cada participante antes de iniciar. Registrá versión,
+hash del ZIP, Windows/build, arquitectura, permisos y pasos aprobados, fallidos
+o no realizados. No adjuntes credenciales, códigos ni informes completos por
+defecto. No se contacta ni registra automáticamente a ninguna persona.
+La compatibilidad en otros equipos, firma de distribución, infraestructura HTTPS
+y demás controles de producción requieren trabajo y pruebas adicionales.
+
+Documentación del repositorio:
+  docs/AGENT_PRIVATE_BETA.md   Paquete, compatibilidad y prueba supervisada.
+  docs/WINDOWS_AGENT.md        Comandos, reglas, permisos y privacidad local.
+  docs/ANALYSIS_INGESTION.md   Envío explícito, puntaje e idempotencia.
+  docs/ANALYSIS_HISTORY.md     Exportación, borrado y reenvíos eliminados.
+  CHANGELOG.md                Evidencia de verificaciones realizadas.

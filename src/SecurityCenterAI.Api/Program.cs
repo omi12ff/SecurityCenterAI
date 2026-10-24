@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -11,11 +12,28 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SecurityCenterAI.Api.Configuration;
 using SecurityCenterAI.Api.Services;
+using SecurityCenterAI.Api.Services.Backups;
+using SecurityCenterAI.Api.Services.Operations;
 using SecurityCenterAI.Domain.Entities;
 using SecurityCenterAI.Infrastructure;
 using SecurityCenterAI.Infrastructure.Persistence;
 
+if (args.Any(arg => arg.StartsWith("--backup-", StringComparison.OrdinalIgnoreCase)))
+{
+    Environment.ExitCode = await BackupCommand.RunAsync(args);
+    return;
+}
+
+if (args.Any(arg => arg.StartsWith("--retention-", StringComparison.OrdinalIgnoreCase)))
+{
+    Environment.ExitCode = await RetentionCommand.RunAsync(args);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
+SafeOperationalLogging.Configure(builder.Logging, builder.Services);
+builder.Services.AddHealthChecks().AddCheck<PostgresReadinessCheck>("postgresql",
+    tags: ["ready"], timeout: TimeSpan.FromSeconds(3));
 
 var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
 var jwtOptions = jwtSection.Get<JwtOptions>()
@@ -35,9 +53,15 @@ builder.Services.AddOptions<AuthSecurityOptions>()
     .Bind(builder.Configuration.GetSection(AuthSecurityOptions.SectionName))
     .Validate(options => options.RefreshDays is >= 1 and <= 365 && options.PasswordResetMinutes is >= 1 and <= 60 &&
         options.VerificationHours is >= 1 and <= 72 && options.MaxFailedLoginAttempts is >= 1 and <= 20 &&
-        options.LockoutMinutes is >= 1 and <= 60 && options.EmailCooldownSeconds is >= 1 and <= 3600,
+        options.LockoutMinutes is >= 1 and <= 60 && options.EmailCooldownSeconds is >= 1 and <= 3600 &&
+        options.MaxActiveSessions is >= 1 and <= 100 && options.EmailChangeMinutes is >= 1 and <= 30,
         "La configuración de seguridad de cuentas no es válida.").ValidateOnStart();
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddOptions<RetentionOptions>()
+    .Bind(builder.Configuration.GetSection(RetentionOptions.SectionName))
+    .Validate(RetentionOptions.Valid, "La configuración de retención no es válida.").ValidateOnStart();
+builder.Services.AddScoped<RetentionMaintenanceService>();
+builder.Services.AddHostedService<RetentionWorker>();
 builder.Services.AddOptions<DeviceSecurityOptions>()
     .Bind(builder.Configuration.GetSection(DeviceSecurityOptions.SectionName))
     .Validate(options => options.PairingMinutes is >= 1 and <= 10 && options.CredentialDays is >= 1 and <= 90,
@@ -45,14 +69,27 @@ builder.Services.AddOptions<DeviceSecurityOptions>()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddSingleton(Channel.CreateBounded<AccountEmail>(new BoundedChannelOptions(100)
+builder.Services.AddSingleton(Channel.CreateBounded<PendingAccountEmail>(new BoundedChannelOptions(100)
 { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait }));
-builder.Services.AddSingleton<SmtpAccountEmailSender>();
+builder.Services.AddSingleton<IAccountEmailTransport, SmtpAccountEmailSender>();
 builder.Services.AddSingleton<IAccountEmailSender, QueuedAccountEmailSender>();
 builder.Services.AddHostedService<AccountEmailWorker>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<AnalysisIngestionService>();
+builder.Services.AddScoped<AnalysisGuidanceService>();
+builder.Services.AddScoped<AnalysisComparisonService>();
+builder.Services.AddScoped<AnalysisHistoryService>();
+builder.Services.AddScoped<AccountExportService>();
+builder.Services.AddScoped<AccountDeletionService>();
+builder.Services.AddScoped<SecurityActivityService>();
+builder.Services.AddScoped<AccountSessionService>();
+builder.Services.AddScoped<AccountPasswordService>();
+builder.Services.AddScoped<AccountProfileService>();
+builder.Services.AddScoped<AccountEmailChangeService>();
+builder.Services.AddOptions<LinkMessageOptions>().Bind(builder.Configuration.GetSection(LinkMessageOptions.SectionName))
+    .Validate(options => options.DailyLimit is >= 1 and <= 1000, "El límite diario de enlaces y mensajes no es válido.").ValidateOnStart();
+builder.Services.AddScoped<LinkMessageService>();
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddCors(options => options.AddPolicy("Frontend", policy =>
@@ -116,10 +153,20 @@ builder.Services.AddRateLimiter(options =>
         RateLimitPartition.GetFixedWindowLimiter(Address(context), _ => Limits(builder.Configuration.GetValue("RateLimits:GlobalPermitLimit", 120))));
     options.AddPolicy("AuthPublic", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
         _ => Limits(builder.Configuration.GetValue("RateLimits:AuthPermitLimit", 60))));
+    options.AddPolicy("Readiness", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
+        _ => Limits(builder.Configuration.GetValue("RateLimits:ReadinessPermitLimit", 30))));
     options.AddPolicy("AccountEmail", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
         _ => Limits(builder.Configuration.GetValue("RateLimits:EmailPermitLimit", 40))));
     options.AddPolicy("DeviceAccount", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
         _ => Limits(builder.Configuration.GetValue("RateLimits:DevicePermitLimit", 60))));
+    options.AddPolicy("AccountExport", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
+        _ => Limits(builder.Configuration.GetValue("RateLimits:AccountExportPermitLimit", 3))));
+    options.AddPolicy("AccountDeletion", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
+        _ => Limits(builder.Configuration.GetValue("RateLimits:AccountDeletionPermitLimit", 3))));
+    options.AddPolicy("AccountPassword", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
+        _ => Limits(builder.Configuration.GetValue("RateLimits:AccountPasswordPermitLimit", 5))));
+    options.AddPolicy("AccountEmailChange", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
+        _ => Limits(builder.Configuration.GetValue("RateLimits:AccountEmailChangePermitLimit", 5))));
     options.AddPolicy("AgentPairing", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
         _ => Limits(builder.Configuration.GetValue("RateLimits:AgentPairPermitLimit", 8))));
     options.AddPolicy("AgentHeartbeat", context => RateLimitPartition.GetFixedWindowLimiter(Address(context),
@@ -168,7 +215,8 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-app.UseExceptionHandler();
+app.UseMiddleware<OperationalRequestMiddleware>();
+app.UseRouting();
 
 if (app.Environment.IsDevelopment())
 {
@@ -185,25 +233,26 @@ app.UseCors("Frontend");
 app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
-    if (!HttpMethods.IsPost(context.Request.Method) || !context.Request.Path.Equals("/api/agent/analyses", StringComparison.OrdinalIgnoreCase))
+    var maximumBytes = context.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>()?.MaxRequestBodySize;
+    if ((!HttpMethods.IsPost(context.Request.Method) && !HttpMethods.IsDelete(context.Request.Method)) || maximumBytes is null)
     { await next(context); return; }
     async Task TooLargeAsync()
     {
         context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
-        await context.Response.WriteAsJsonAsync(new { title = "El informe supera el límite de 64 KiB.", status = 413 }, context.RequestAborted);
+        await context.Response.WriteAsJsonAsync(new { title = $"El contenido supera el límite de {maximumBytes / 1024} KiB.", status = 413 }, context.RequestAborted);
     }
-    if (context.Request.ContentLength > 65_536) { await TooLargeAsync(); return; }
-    // Bound chunked bodies too. Keep this small report solely in memory and rewind it
-    // for MVC; never buffer arbitrary client evidence to temporary disk files.
+    if (context.Request.ContentLength > maximumBytes) { await TooLargeAsync(); return; }
+    // Bound declared and chunked bodies using endpoint metadata, before MVC.
+    // Keep reports and feedback solely in memory; never spill client text to disk.
     var original = context.Request.Body;
     await using var bounded = new MemoryStream();
     var buffer = new byte[8192];
     while (true)
     {
-        var read = await original.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, 65_537 - bounded.Length)), context.RequestAborted);
+        var read = await original.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, maximumBytes.Value + 1 - bounded.Length)), context.RequestAborted);
         if (read == 0) break;
         await bounded.WriteAsync(buffer.AsMemory(0, read), context.RequestAborted);
-        if (bounded.Length > 65_536) { await TooLargeAsync(); return; }
+        if (bounded.Length > maximumBytes) { await TooLargeAsync(); return; }
     }
     bounded.Position = 0;
     context.Request.Body = bounded;
@@ -213,8 +262,7 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
-    .AllowAnonymous();
+app.MapOperationalHealth();
 
 app.Run();
 

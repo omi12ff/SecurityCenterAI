@@ -1,4 +1,5 @@
 import type { AuthFormState } from "./contracts";
+import { validNewPasswordLength, NEW_PASSWORD_HELP } from "./new-password.ts";
 export type { AuthFormState } from "./contracts";
 
 type Credentials = { name?: string; email: string; password: string };
@@ -28,7 +29,7 @@ export function validateCredentials(mode: "login" | "register", formData: FormDa
   if (password.length > 128) errors.password = "Usá una contraseña de hasta 128 caracteres.";
   if (mode === "register") {
     if (name.length < 2 || name.length > 100) errors.name = "Usá un nombre de entre 2 y 100 caracteres.";
-    if (password.length < 8) errors.password = "Usá al menos 8 caracteres.";
+    if (!validNewPasswordLength(password)) errors.password = NEW_PASSWORD_HELP;
     if (text("confirmPassword") !== password) errors.confirmPassword = "Las contraseñas deben coincidir.";
   }
   if (Object.keys(errors).length) {

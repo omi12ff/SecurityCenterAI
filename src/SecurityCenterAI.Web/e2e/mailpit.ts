@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 
 type Address = { Address?: string };
 type Summary = { ID: string; To?: Address[] };
-type Message = Summary & { Text?: string; HTML?: string };
+type Message = Summary & { Subject?: string; Text?: string; HTML?: string };
 
 function assertOwnedAddress(email: string) {
   if (!/^e2e-[0-9a-f-]+@example\.invalid$/.test(email)) {
@@ -55,7 +55,24 @@ export async function removeAccountMessages(email: string) {
   }
 }
 
-export async function waitForAccountLink(email: string, purpose: 'verify-email' | 'reset-password', excludedLink?: string) {
+export async function waitForPasswordChangeNotice(email: string, purpose: 'change' | 'reset' | 'email' = 'change'): Promise<string> {
+  assertOwnedAddress(email);
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    for (const summary of await accountMessages(email)) {
+      const response = await mailboxRequest(`/api/v1/message/${encodeURIComponent(summary.ID)}`);
+      const message = await response.json() as Message;
+      const subject = purpose === 'reset' ? 'Tu contraseña fue restablecida — Security Center AI'
+        : purpose === 'email' ? 'Tu correo fue cambiado — Security Center AI' : 'Tu contraseña fue cambiada — Security Center AI';
+      if (belongsOnlyToAccount(message, email) && message.Subject === subject)
+        return message.Text ?? '';
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  throw new Error('The isolated account did not receive its password change notice.');
+}
+
+export async function waitForAccountLink(email: string, purpose: 'verify-email' | 'reset-password' | 'confirm-email-change', excludedLink?: string, kind?: 'current' | 'new') {
   assertOwnedAddress(email);
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
@@ -67,7 +84,8 @@ export async function waitForAccountLink(email: string, purpose: 'verify-email' 
       const links = contents.match(/https?:\/\/[^\s<>"']+/g) ?? [];
       for (const link of links) {
         const candidate = new URL(link.replace(/&amp;/g, '&'));
-        if (candidate.pathname === `/${purpose}` && candidate.searchParams.has('token') && candidate.toString() !== excludedLink) {
+        if (candidate.pathname === `/${purpose}` && candidate.searchParams.has('token') && candidate.toString() !== excludedLink &&
+          (!kind || candidate.searchParams.get('kind') === kind)) {
           return candidate.toString();
         }
       }

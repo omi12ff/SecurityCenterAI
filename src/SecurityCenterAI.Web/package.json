@@ -9,7 +9,9 @@
     "build": "next build --webpack",
     "start": "next start --hostname localhost",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/validation.test.ts tests/token.test.ts tests/devices.test.ts tests/analyses.test.ts",
+    "test": "node --experimental-strip-types --test tests/validation.test.ts tests/token.test.ts tests/devices.test.ts tests/analyses.test.ts tests/guidance.test.ts tests/comparisons.test.ts tests/analysis-history.test.ts tests/account-export.test.ts tests/account-deletion.test.ts tests/security-activity.test.ts tests/account-sessions.test.ts tests/account-password.test.ts tests/account-email-change.test.ts tests/link-message.test.ts tests/agent-package.test.ts tests/analysis-priorities.test.ts tests/problem-report.test.ts",
+    "test:tools": "node --experimental-strip-types --test tests/link-message.test.ts",
+    "test:email": "node --experimental-strip-types --test tests/account-email-change.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

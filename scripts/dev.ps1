@@ -167,6 +167,12 @@ try {
         }
         catch { throw 'La API tiene una instancia activa pero no responde correctamente. Repite el comando con -Restart.' }
         Write-Host "La API de este proyecto ya esta iniciada en http://localhost:$Port."
+        try {
+            $readiness = Invoke-RestMethod -Uri "http://localhost:$Port/health/ready" -TimeoutSec 6
+            if ($readiness.status -ne 'ready') { throw 'Dependencia no disponible.' }
+            Write-Host 'PostgreSQL responde desde la API.'
+        }
+        catch { Write-Warning 'No se pudo comprobar PostgreSQL desde la API. Ejecuta scripts\status.ps1 para revisar el estado.' }
         Write-Host 'No se recompilo ni se aplicaron migraciones. Para cargar cambios, repite este comando con -Restart.'
         Write-Host 'Para analizar y enviar resultados usa scripts\agent.ps1 -Action scan -Send en otra terminal.'
         return

@@ -21,15 +21,24 @@ public sealed class AuthController(AccountService accounts, AppDbContext databas
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
         if (request.Name.Trim().Length < 2) return BadRequest(new ProblemDetails { Title = "Revisá los datos ingresados.", Status = 400 });
-        var result = await accounts.RegisterAsync(request, cancellationToken);
-        return result is null ? Conflict(new ProblemDetails { Title = "El correo ya está registrado.", Status = 409 }) : CreatedAtAction(nameof(Register), result);
+        try
+        {
+            var result = await accounts.RegisterAsync(request, cancellationToken);
+            return result is null ? Conflict(new ProblemDetails { Title = "El correo ya está registrado.", Status = 409 }) : CreatedAtAction(nameof(Register), result);
+        }
+        catch (NewPasswordRejectedException) { return RejectedPassword(); }
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await accounts.LoginAsync(request, cancellationToken);
-        return result is null ? InvalidCredentials() : Ok(result);
+        try
+        {
+            var result = await accounts.LoginAsync(request, cancellationToken);
+            return result is null ? InvalidCredentials() : Ok(result);
+        }
+        catch (DeviceOperationException exception) when (exception.StatusCode == 409)
+        { return Conflict(new ProblemDetails { Status = 409, Title = exception.Message }); }
     }
 
     [HttpPost("refresh")]
@@ -71,8 +80,11 @@ public sealed class AuthController(AccountService accounts, AppDbContext databas
     }
 
     [HttpPost("reset-password")]
-    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken) =>
-        await accounts.ResetPasswordAsync(request.Token, request.Password, cancellationToken) ? NoContent() : InvalidActionToken();
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        try { return await accounts.ResetPasswordAsync(request.Token, request.Password, cancellationToken) ? NoContent() : InvalidActionToken(); }
+        catch (NewPasswordRejectedException) { return RejectedPassword(); }
+    }
 
     [Authorize]
     [HttpPost("resend-verification")]
@@ -88,5 +100,6 @@ public sealed class AuthController(AccountService accounts, AppDbContext databas
         await accounts.VerifyEmailAsync(request.Token, cancellationToken) ? NoContent() : InvalidActionToken();
 
     private UnauthorizedObjectResult InvalidCredentials() => Unauthorized(new ProblemDetails { Title = "Credenciales inválidas.", Status = 401 });
+    private BadRequestObjectResult RejectedPassword() => BadRequest(new { code = "password_policy", title = NewPasswordPolicy.Message, status = 400 });
     private BadRequestObjectResult InvalidActionToken() => BadRequest(new ProblemDetails { Title = "El enlace no es válido o ya venció. Solicitá uno nuevo.", Status = 400 });
 }

@@ -34,6 +34,9 @@ public sealed class AnalysisIngestionService(AppDbContext database, TimeProvider
                     .SingleOrDefaultAsync(item => item.Id == credentialId && item.DeviceId == deviceId, cancellationToken);
                 if (credential is null || credential.RevokedAtUtc.HasValue || credential.ExpiresAtUtc <= Now || credential.Device.RevokedAtUtc.HasValue)
                     throw new DeviceOperationException(401, "La credencial del dispositivo ya no está disponible. Volvé a vincular el equipo.");
+                if (await database.DeletedAnalysisReports.AsNoTracking().AnyAsync(item => item.DeviceId == deviceId &&
+                    item.ReportId == request.ReportId, cancellationToken))
+                    throw new DeviceOperationException(410, "El informe fue eliminado. Ejecutá un nuevo análisis con el agente.");
                 var existing = await database.SecurityAnalyses.AsNoTracking()
                     .SingleOrDefaultAsync(item => item.DeviceId == deviceId && item.ReportId == request.ReportId, cancellationToken);
                 if (existing is not null)
@@ -65,11 +68,21 @@ public sealed class AnalysisIngestionService(AppDbContext database, TimeProvider
                 if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
                 database.ChangeTracker.Clear();
             }
+            catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+                { SqlState: PostgresErrorCodes.ForeignKeyViolation, ConstraintName:
+                    "FK_security_analyses_users_UserId" or "FK_security_analyses_devices_id_dispositivo" })
+            {
+                if (transaction is not null) await transaction.RollbackAsync(cancellationToken);
+                database.ChangeTracker.Clear();
+                throw new DeviceOperationException(401, "La credencial del dispositivo ya no está disponible. Volvé a vincular el equipo.");
+            }
         }
         throw new DeviceOperationException(409, "Otra operación modificó el dispositivo. Volvé a intentar enviar el mismo informe.");
     }
 
     private static bool IsRetryable(Exception exception) => exception is DbUpdateConcurrencyException ||
+        exception is InvalidOperationException { InnerException: { } inner } && IsRetryable(inner) ||
+        exception is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure } ||
         exception is DbUpdateException { InnerException: PostgresException postgres } &&
         (postgres.SqlState is PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure ||
             postgres is { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "UX_security_analyses_dispositivo_informe" });

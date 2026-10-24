@@ -1,6 +1,7 @@
 import "server-only";
 import type { AuthFormState, AuthResponse, DashboardData, UserProfile } from "./contracts";
 import { parseDashboard } from "./analyses";
+import { NEW_PASSWORD_HELP } from "./new-password";
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly fieldErrors?: AuthFormState["fieldErrors"]) {
@@ -18,11 +19,11 @@ function apiUrl(path: string): URL {
   return new URL(path.replace(/^\//, ""), base);
 }
 
-export async function request(path: string, options: { body?: unknown; token?: string } = {}): Promise<unknown> {
+export async function request(path: string, options: { body?: unknown; token?: string; method?: "GET" | "POST" | "DELETE" } = {}): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(apiUrl(path), {
-      method: options.body === undefined ? "GET" : "POST",
+      method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       cache: "no-store",
       signal: AbortSignal.timeout(12_000),
       headers: {
@@ -36,8 +37,13 @@ export async function request(path: string, options: { body?: unknown; token?: s
     throw new ApiError(0, "No pudimos conectar con el servicio. Intentá de nuevo en unos momentos.");
   }
 
-  const body: unknown = await response.json().catch(() => null);
+  const body: unknown = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
+    if (response.status === 400 && ["/api/auth/register", "/api/auth/reset-password", "/api/account/password"].includes(path) &&
+      body && typeof body === "object" && "code" in body && body.code === "password_policy")
+      throw new ApiError(400, NEW_PASSWORD_HELP, { password: NEW_PASSWORD_HELP });
+    if (response.status === 409 && path === "/api/auth/login")
+      throw new ApiError(409, "Se alcanzó el límite de sesiones web. Cerrá una desde otro navegador o usá Recuperar contraseña para cerrar todos los accesos.");
     const messages: Record<number, string> = {
       400: "Revisá los campos indicados para continuar.",
       401: "El correo o la contraseña no son correctos.",

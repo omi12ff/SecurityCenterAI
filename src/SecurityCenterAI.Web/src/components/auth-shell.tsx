@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { InformationLinks } from "./information-links";
 
 type AuthShellProps = {
   mode: "login" | "register";
@@ -73,7 +74,7 @@ export function AuthShell({ mode, children }: AuthShellProps) {
           <SecurityIllustration />
           <div className="story-note">
             <span className="story-note-icon"><ShieldMark /></span>
-            <div><strong>Una base para lo que viene</strong><span>El agente de Windows está en preparación.</span></div>
+            <div><strong>Vos decidís cuándo analizar</strong><span>Agente Windows portátil en vista previa.</span></div>
           </div>
         </div>
 
@@ -90,7 +91,7 @@ export function AuthShell({ mode, children }: AuthShellProps) {
           <p className="auth-description">{isLogin ? "Accedé a tu dashboard y continuá donde lo dejaste." : "Configurá tu acceso a Security Center AI."}</p>
           {children}
         </section>
-        <footer className="auth-main-footer"><span className="footer-shield"><ShieldMark /></span><span>Security Center AI · Tu centro de seguridad</span></footer>
+        <footer className="auth-main-footer"><span className="footer-shield"><ShieldMark /></span><span>Security Center AI · Tu centro de seguridad</span><InformationLinks /></footer>
       </main>
     </div>
   );
