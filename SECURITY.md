@@ -1,12 +1,17 @@
 # Seguridad de Security Center AI
 
-Revisión documental: 22 de octubre de 2026.
+Revisión documental: 26 de octubre de 2026.
 
 Este documento describe el backend, la web de desarrollo existente y los controles
 pendientes. La guía maestra define objetivos del producto; sus requisitos no
 equivalen a funciones implementadas. Hay una primera web de autenticación y
 dashboard y una prueba de concepto del agente Windows de consola, con ingesta
-manual y puntos confirmados limitados a diez reglas. Un proveedor de IA y los
+manual y puntos confirmados limitados a diez reglas. El adaptador de explicación
+de IA por análisis está desactivado por defecto. En esta instalación el usuario
+habilitó la configuración con una clave de producto y la ruta explícita
+`openrouter/openrouter/free`. Una prueba real del adaptador produjo diez
+explicaciones válidas a partir de estados ficticios, sin usar el informe personal.
+La consulta se solicita con botón junto al aviso de datos, sin casilla. Los
 controles de publicación siguen pendientes.
 
 ## Descarga privada del agente
@@ -53,8 +58,8 @@ cambiarla o revocarla es necesario aunque se elimine el mensaje o archivo.
 | Cambio de contraseña | Bearer activo, contraseña actual, confirmación, límite específico y contador/bloqueo compartido. Fila de usuario bloqueada, sesión revalidada y escritura atómica de hash, cierre de sesiones, recuperación pendiente y evento. | Clave nueva distinta y política local 15–128; lista inicial sin corpus completo de filtraciones. Aviso posterior de mejor esfuerzo; agentes conservan acceso. [Uso](docs/ACCOUNT_PASSWORD.md). |
 | Renovación | Refresh opaco aleatorio de 32 bytes, persistido mediante SHA-256, con rotación y vigencia de 30 días. | La reutilización de un refresh consumido revoca su sesión completa. También puede ocurrir por solicitudes concurrentes: la web debe coordinar renovaciones y pedir login si la sesión se revoca. La purga opcional conserva todos los hashes de sesiones activas y solo los elimina por cascada al quitar sesiones cerradas antiguas. |
 | Mantenimiento técnico | Vista previa, aplicación manual confirmada, lotes por categoría y bloqueo asesor transaccional en PostgreSQL. Worker desactivado por defecto. | Solo sesiones/tokens/códigos/credenciales cerrados o inválidos después del plazo. No purga perfiles, contenido ni marcas de informes eliminados. Los plazos iniciales requieren revisión para producción; [operación](docs/RETENTION_MAINTENANCE.md). |
-| Sesión del navegador | Server Actions y cookies de access y refresh con `HttpOnly`, `SameSite=Lax`, `Path=/` y `Secure` en producción. No se usa `localStorage`. Logout y cierre global se tramitan en la API. | No hay listado ni revocación individual de otras sesiones en la web. El parser solo extrae metadatos; .NET valida firma y estado de sesión. Conservar las protecciones de origen de las Server Actions y revisar proxies y TLS antes de publicar. |
-| Correo | Tokens aleatorios, hashes SHA-256, propósito, vencimiento y uso único. Cola acotada con reintentos temporales, caducidad y logs mínimos; diagnóstico NOOP solo local. | Cola volátil, sin recuperación tras reinicio ni garantía de entrega. Mailpit local; SMTP autenticado/TLS exigido fuera de desarrollo. Sin proveedor elegido. [Límites](docs/MAIL_DELIVERY.md). |
+| Sesión del navegador | Server Actions y cookies de access y refresh con `HttpOnly`, `SameSite=Lax`, `Path=/` y `Secure` en producción. No se usa `localStorage`. Inventario, cierre individual y global se tramitan en la API. | El parser solo extrae metadatos; .NET valida firma y estado de sesión. Conservar las protecciones de origen de las Server Actions y revisar proxies y TLS antes de publicar. |
+| Correo | Tokens aleatorios, hashes de un uso y cola cifrada persistente, atómica con la operación de cuenta. Reservas PostgreSQL, reintentos, vigencia y revalidación de enlaces. Claves fuera del repo bajo DPAPI del usuario Windows de la API. | No garantiza entrega final o exactamente una vez. Otra identidad/máquina/alojamiento requiere claves accesibles y protegidas acordadas. SMTP local Mailpit; fuera de desarrollo exige autenticación/TLS. Sin proveedor elegido. [Límites](docs/MAIL_DELIVERY.md). |
 | Abuso de autenticación | Bloqueo de cuenta de 15 minutos tras 5 fallos; respuestas genéricas, hash de comparación para login inexistente y mínimo de 300 ms para recuperación. Espera de 60 segundos por cuenta y tipo de correo. Rate limiting por IP: global 120/minuto, autenticación 60/minuto, correo 40/minuto. | El mínimo de tiempo reduce diferencias; no garantiza tiempos idénticos. Los límites por IP viven en memoria y se reinician con el proceso. Next.js comparte su IP entre usuarios. No se confía en `X-Forwarded-For`; faltan estrategia de proxies y varias instancias. |
 | Comunicación web/API | `API_BASE_URL` solo se usa en el servidor Next.js. El dashboard se consulta con Bearer y `cache: no-store`; la clave de firma permanece en .NET. | El desarrollo usa HTTP en localhost. El despliegue requiere TLS, revisión de los orígenes y las protecciones de las acciones del servidor. La cookie no sustituye la autorización de la API. |
 | Dashboard | Requiere autenticación y un `sub` que pueda interpretarse como UUID. Las consultas filtran por ese usuario. | Devuelve el puntaje más reciente, el total y hasta 5 análisis propios. No genera análisis ni puntajes. Los recursos de dispositivos tienen su autorización propia. |
@@ -68,10 +73,11 @@ cambiarla o revocarla es necesario aunque se elimine el mensaje o archivo.
 | Secretos de desarrollo | `.gitignore` excluye `.env` y `appsettings.Local.json`; `.dockerignore` excluye secretos locales, dependencias y artefactos del contexto Docker. `scripts/dev.ps1` lee los cuatro valores admitidos de `.env` y prepara variables del proceso para Compose y .NET. | `.env` es un archivo local de texto, sin cifrado del proyecto. La exclusión de Git no elimina secretos ya versionados. .NET no carga `.env` automáticamente y no hay carga explícita de `appsettings.Local.json`. |
 | PostgreSQL local | Compose publica el puerto como `127.0.0.1:5432:5432` y usa un volumen persistente. | Limita la exposición del puerto al equipo local; otros procesos locales y las redes internas de Docker tienen su propio acceso. No hay configuración de cifrado de datos o backups automáticos en el proyecto. |
 | Backup manual | Archivo cifrado AES-256-GCM con contraseña, permisos de usuario/SYSTEM y verificación de restauración en una base temporal. | Incluye hashes y registros internos de autenticación. No hay copia remota, programación ni restauración sobre el servicio activo. Contraseña independiente de `.env`; [custodia y límites](docs/DATABASE_BACKUPS.md). |
+| Ensayo de recuperación | `rehearse` verifica la copia y retira sesiones, tokens, códigos/credenciales, solicitudes y cola solo en su temporal, revocando equipos y renovando versiones. Huellas de contenido y transacción con rollback. Rechaza destinos/esquemas no revisados. | La temporal se elimina. No es recuperación activa, conciliación de borrados futuros, rotación de contraseñas/secretos o sandbox de SQL malicioso. [Alcance](docs/RECOVERY_REHEARSAL.md). |
 | Actividad privada | Catorce acciones completadas se registran en la misma escritura/transacción. Consulta Bearer por propietario, filtros validados y continuación por un evento propio dentro de la selección. Sin datos libres o secretos; EF rechaza cambios/borrados salvo al eliminar la cuenta. | Hasta 50 por consulta y exportación completa sin filtros. No cubre intentos fallidos ni todas las operaciones. SQL directo/administradores pueden alterar la tabla; falta auditoría externa, conservación y monitoreo. [Alcance](docs/SECURITY_ACTIVITY.md). |
 | Cambio de correo | Correo actual verificado, contraseña al solicitar/finalizar, tokens de propósito separado y confirmación de ambas direcciones. Fila de usuario bloqueada, sesión revalidada y escritura atómica con cierre web/evento. | No es MFA o recuperación sin acceso al correo actual. Confirmar una dirección no cambia el perfil. Avisos posteriores de mejor esfuerzo; agentes conservan acceso. [Uso](docs/ACCOUNT_EMAIL_CHANGE.md). |
 | HTTP y errores | Hay redirección HTTPS fuera de `Development`, errores genéricos y correlación por id generado por el servidor. Swagger se habilita en `Development`. CORS admite el origen configurado en `FrontendUrl`. | El helper utiliza el perfil HTTP local. Esto no acredita TLS de producción. CORS no sustituye la autorización. |
-| Monitoreo y logs | `/health/ready` consulta PostgreSQL de solo lectura con tiempo acotado. Logs JSON de campos/categorías conocidos, sin cuerpos, URLs libres, scopes, SQL o excepciones. | No comprueba entrega SMTP, esquema, backups o todos los permisos. Sin archivos, conservación, métricas ni alertas automatizadas. Scripts, otros servicios y fallos anteriores al arranque tienen alcance propio. [Detalles](docs/OPERATIONAL_MONITORING.md). |
+| Monitoreo y logs | Readiness PostgreSQL acotado y logs mínimos. Diagnóstico local de cola: consulta agregada READ ONLY con contadores/fechas, sin payloads, claves, SMTP o endpoint nuevo. | Observación puntual, sin prueba de worker activo/entrega. Sin métricas persistentes, alertas externas, backups o revisión completa de esquema/permisos. Acceso local requiere configuración administrativa; terminal tiene custodia propia. [Detalles](docs/OPERATIONAL_MONITORING.md). |
 
 ## Enlaces y mensajes
 
@@ -86,6 +92,37 @@ borrado de cuenta y exportación mínima; no se almacenan reportes o entradas.
 API y web usan cabeceras privadas y logs sin contenido. Concurrencia/fallos se
 ensayan en PostgreSQL y una prueba usa un listener local para comprobar que el
 destino no recibe conexiones. [Contrato y alcance](docs/LINK_MESSAGE_CHECKS.md).
+
+## Explicación opcional de IA
+
+La solicitud exige Bearer de cuenta, sesión activa, correo verificado, pertenencia
+del dispositivo/análisis y confirmación explícita. El GET de disponibilidad no
+consulta al proveedor. No hay entrada de conversación, prompt o destino libre.
+El contexto se construye en el servidor desde puntos/cobertura, estados y catálogo
+de diez reglas; excluye evidencia libre, identificadores personales/de informes,
+fechas, feedback, archivos y secretos. La API nunca entrega la clave al navegador.
+
+Respuesta JSON con campos y tamaños acotados, diez reglas conocidas sin duplicados
+y texto escapado en la web. Las referencias y acciones manuales proceden de las
+guías locales; no se aceptan enlaces o comandos del modelo. Un esquema válido no
+garantiza veracidad: la interfaz mantiene la advertencia y los desconocidos.
+No escribe resultados, cambia el puntaje o ejecuta cambios en Windows. La guía
+local sigue disponible ante desactivación, fallo, cuota o salida incompatible.
+
+Modelo y gateway se fijan en la configuración del servidor. El bloque inicial
+rechaza el identificador ambiguo `openrouter/free` y acepta el nombre calificado
+`openrouter/openrouter/free` o modelos con prefijo `openrouter/` y sufijo `:free`.
+La corrección del 2026-10-26 rechaza el prefijo preliminar `or/`, modelos pagos y
+rutas `auto`. Se requieren también permisos de modelo/conexión en OmniRoute,
+sin fallback hacia otras conexiones. Credencial de producto separada de desarrollo;
+configuración y clave DPAPI CurrentUser fuera del repositorio. No se registra
+prompt, respuesta o secreto en los logs de aplicación. `noLog` en el gateway no
+determina la conservación del proveedor: revisar sus condiciones antes de habilitar.
+
+Cinco intentos por propietario/día UTC por defecto y concurrencia 4 global/1 por
+propietario, en memoria. Un intento fallido puede consumir cuota; reiniciar la API
+restablece estos límites. No son controles coordinados de producción para varias
+instancias. [Contrato y configuración](docs/AI_EXPLANATIONS.md).
 
 ## Validación local
 
@@ -137,7 +174,7 @@ de despliegue de producción.
 | --- | --- |
 | Cuenta | MFA opcional, política de contraseñas comprometidas, alertas de acceso y revisión de enumeración y tiempos de respuesta. El cambio autenticado, verificación y recuperación básicos no completan la respuesta a una cuenta comprometida. |
 | Sesiones | Monitoreo de reutilización, política operativa de limpieza y revisión integral de varias instancias/proxies. El límite por cuenta ya tiene prueba concurrente en PostgreSQL. Reautenticación para futuras acciones especialmente sensibles. |
-| Correo | Selección y operación de SMTP, cola durable/recuperación tras reinicio, avisos para otros flujos, dominio/remitente, control de volumen y conservación. Ya hay avisos de cambio/reset de contraseña y cambio de correo, con reintentos temporales. Mailpit es local. |
+| Correo | Cola cifrada y recuperación tras reinicio incorporadas. Pendientes selección/operación de SMTP, dominio/remitente, custodia de claves para el alojamiento, capacidad, alertas y conservación. Mailpit sigue local. |
 | API y despliegue | Validación y autorización por cada recurso nuevo, límites de solicitudes, configuración TLS comprobada, revisión del origen CORS, hosts y errores según el entorno. |
 | Secretos | Retirar la dependencia de valores de demostración en despliegues, definir custodia y rotación y revisar el historial si hubo exposición. Cambiar la clave JWT invalida los tokens firmados con la anterior y requiere coordinación. |
 | Datos | Aplicar mínimo privilegio a la cuenta de base de datos, definir cifrado del almacenamiento, conservación de contenido y operación de copias externas/recuperación real. Existe backup manual cifrado con ensayo aislado y mantenimiento técnico opcional de autenticación. Véase [PRIVACY_NOTES.md](PRIVACY_NOTES.md). |
@@ -174,11 +211,11 @@ control de la credencial, revoca el dispositivo desde la web. Los informes
 persisten hasta borrarlos explícitamente. Los permisos y límites de cada regla
 están en [docs/WINDOWS_AGENT.md](docs/WINDOWS_AGENT.md).
 
-La futura IA debe recibir únicamente el contexto necesario y autorizado, con
-reducción de datos, límites y trazabilidad. La guía propone reglas deterministas
-para hallazgos y puntajes, explicaciones basadas en evidencia y ausencia de
-comandos arbitrarios. El cálculo actual sigue diez reglas versionadas, muestra
-cobertura y conserva los desconocidos; todavía no hay proveedor de IA integrado.
+La explicación opcional actual conserva reglas deterministas para hallazgos y
+puntajes, cobertura y estados desconocidos, con el contexto reducido descrito
+arriba. La vigilancia y autonomía futuras requieren alcance explícito y
+autorizaciones por plan/operación; no están implementadas. No se comprobó
+inferencia externa de IA ni hay remediación automática.
 
 La ingesta acepta observaciones de hasta siete días, duración de escaneo de
 hasta treinta minutos, tolerancia futura de cinco minutos y fechas UTC. Guarda

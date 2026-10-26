@@ -9,7 +9,8 @@ public enum AccountEmailPurpose { EmailVerification, PasswordReset, PasswordChan
 public sealed record AccountEmail(string Recipient, string Token, AccountEmailPurpose Purpose);
 public interface IAccountEmailSender
 {
-    Task SendAsync(AccountEmail message, CancellationToken cancellationToken);
+    // Enlist delivery material in the caller's DbContext; its SaveChanges commits both.
+    Task QueueAsync(Guid userId, AccountEmail message, CancellationToken cancellationToken);
 }
 
 public interface IAccountEmailTransport

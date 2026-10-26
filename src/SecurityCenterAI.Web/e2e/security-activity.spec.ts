@@ -1,3 +1,4 @@
+import { postgresExecArgs } from './database.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -10,7 +11,7 @@ function seedActivity(account: TestAccount, count: 0 | 65, mixed = false) {
   if (!/^e2e-[0-9a-f-]+@example\.invalid$/.test(account.email)) throw new Error('Refused an account outside the fictitious E2E namespace.');
   let root = process.cwd();
   while (!existsSync(join(root, 'SecurityCenterAI.sln'))) { const parent = dirname(root); if (parent === root) throw new Error('Repository missing.'); root = parent; }
-  const result = spawnSync('docker', ['compose', 'exec', '-T', 'postgres', 'sh', '-c',
+  const result = spawnSync('docker', [...postgresExecArgs(), 'sh', '-c',
     'exec psql --no-psqlrc --set=ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=seed_email="$1"', 'activity-e2e', account.email], {
     cwd: root, encoding: 'utf8', windowsHide: true, timeout: 30_000,
     input: count === 0 ? "DELETE FROM security_activity WHERE id_usuario IN (SELECT id_usuario FROM users WHERE correo_electronico = :'seed_email' AND correo_electronico LIKE 'e2e-%@example.invalid');" : `
@@ -113,7 +114,7 @@ test('filtros conservan acción y días UTC al continuar y los errores no parece
   await expect(form.getByLabel('Desde (UTC)', { exact: true })).toHaveValue('');
   await expect(form.getByLabel('Hasta (UTC)', { exact: true })).toHaveValue('');
   await page.goto('/account/activity?from=2026-02-30&action=PRIVATE_INVALID');
-  await expect(page.getByRole('alert')).toContainText('Los filtros no son válidos');
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Los filtros no son válidos');
   await expect(page.locator('body')).not.toContainText('PRIVATE_INVALID');
   await page.getByRole('link', { name: 'Volver al historial', exact: true }).click();
   await expect(page.locator('.security-activity-list li')).toHaveCount(50);

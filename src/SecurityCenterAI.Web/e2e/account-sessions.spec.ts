@@ -1,3 +1,4 @@
+import { postgresExecArgs } from './database.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,7 +10,7 @@ function seedSessions(account: TestAccount) {
   if (!/^e2e-[0-9a-f-]+@example\.invalid$/.test(account.email)) throw new Error('Refused an account outside the fictitious E2E namespace.');
   let root = process.cwd();
   while (!existsSync(join(root, 'SecurityCenterAI.sln'))) { const parent = dirname(root); if (parent === root) throw new Error('Repository missing.'); root = parent; }
-  const result = spawnSync('docker', ['compose', 'exec', '-T', 'postgres', 'sh', '-c',
+  const result = spawnSync('docker', [...postgresExecArgs(), 'sh', '-c',
     'exec psql --no-psqlrc --set=ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=seed_email="$1"', 'sessions-e2e', account.email], {
     cwd: root, encoding: 'utf8', windowsHide: true, timeout: 30_000,
     input: `INSERT INTO user_sessions ("Id","UserId","CreatedAtUtc","ExpiresAtUtc","RevokedAtUtc","ConcurrencyStamp")

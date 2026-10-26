@@ -11,8 +11,7 @@ using SecurityCenterAI.Infrastructure.Persistence;
 namespace SecurityCenterAI.Api.Services;
 
 public sealed class AccountPasswordService(AppDbContext database, IPasswordHasher<User> passwords,
-    IOptions<AuthSecurityOptions> security, TimeProvider clock, IAccountEmailSender email,
-    ILogger<AccountPasswordService> logger)
+    IOptions<AuthSecurityOptions> security, TimeProvider clock, IAccountEmailSender email)
 {
     public async Task ChangeAsync(Guid userId, Guid sessionId, ChangeAccountPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -59,6 +58,7 @@ public sealed class AccountPasswordService(AppDbContext database, IPasswordHashe
                 SecurityActivityRecorder.Add(database, userId, SecurityActivityKind.PasswordChanged, now);
                 var emailChange = await database.EmailChangeRequests.SingleOrDefaultAsync(item => item.UserId == userId, cancellationToken);
                 if (emailChange is not null) database.EmailChangeRequests.Remove(emailChange);
+                await email.QueueAsync(userId, new(user.Email, "", AccountEmailPurpose.PasswordChanged), cancellationToken);
                 await database.SaveChangesAsync(cancellationToken);
                 if (transaction is not null) await transaction.CommitAsync(cancellationToken);
                 recipient = user.Email;
@@ -71,10 +71,6 @@ public sealed class AccountPasswordService(AppDbContext database, IPasswordHashe
             }
         }
         if (recipient is null) throw new DeviceOperationException(409, "Otra operación modificó tu cuenta. Revisá su estado antes de volver a intentar.");
-        // Notification is best effort after commit; a transport failure cannot undo the change.
-        try { await email.SendAsync(new(recipient, "", AccountEmailPurpose.PasswordChanged), cancellationToken); }
-        catch (Exception)
-        { logger.LogWarning(SafeOperationalLogging.EmailQueueRejected, "No se pudo encolar el aviso de cambio de contraseña."); }
     }
 
     private static DeviceOperationException Unconfirmed() => new(403, "No pudimos confirmar tu contraseña. Revisala o esperá antes de intentar de nuevo.");

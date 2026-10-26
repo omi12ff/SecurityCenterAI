@@ -47,7 +47,7 @@ test("recorrido 1.0: cuenta, agente simulado, resultados, comparación, herramie
   await page.getByRole("link", { name: "Entender mi análisis", exact: true }).click();
   await page.getByLabel("Me ayudó", { exact: true }).check();
   await page.getByLabel("Comentario opcional", { exact: false }).fill("Valoración ficticia del recorrido integrado");
-  await page.getByRole("button", { name: "Guardar valoración", exact: true }).click(); await expect(page.getByRole("status")).toContainText("quedó guardada");
+  await page.getByRole("button", { name: "Guardar valoración", exact: true }).click(); await expect(page.getByRole("region", { name: "¿Te ayudó esta guía?", exact: true }).getByRole("status")).toContainText("quedó guardada");
   const individualDownload = page.waitForEvent("download"); await page.getByRole("link", { name: "Exportar análisis (JSON)", exact: true }).click();
   const exportedAnalysis = JSON.parse(await readFile((await (await individualDownload).path())!, "utf8"));
   expect(exportedAnalysis.analysis.id).toBe(first.analysisId); expect(exportedAnalysis.feedback.rating).toBe("helpful");

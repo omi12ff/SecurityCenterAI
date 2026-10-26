@@ -9,9 +9,9 @@ public static class BackupCommand
     public static async Task<int> RunAsync(string[] args)
     {
         if (!OperatingSystem.IsWindows()) { Console.Error.WriteLine("Este helper local requiere Windows."); return 2; }
-        if (args.Length != 5 || args[0] is not ("--backup-create" or "--backup-verify") || args[1] != "--repository" ||
+        if (args.Length != 5 || args[0] is not ("--backup-create" or "--backup-verify" or "--backup-rehearse") || args[1] != "--repository" ||
             args[3] != (args[0] == "--backup-create" ? "--directory" : "--file"))
-        { Console.Error.WriteLine("Usá scripts/backup.ps1 -Action create o -Action verify -File <copia>."); return 2; }
+        { Console.Error.WriteLine("Usá scripts/backup.ps1 -Action create, verify o rehearse; verify/rehearse requieren -File <copia>."); return 2; }
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         ConsoleCancelEventHandler cancel = (_, signal) => { signal.Cancel = true; cancellation.Cancel(); };
         Console.CancelKeyPress += cancel;
@@ -23,9 +23,12 @@ public static class BackupCommand
             var connection = Environment.GetEnvironmentVariable("ConnectionStrings__PostgreSQL")
                 ?? throw new InvalidOperationException("Conexión no configurada.");
             var service = new DatabaseBackupService(connection, args[2]);
-            var report = args[0] == "--backup-create"
-                ? await service.CreateAsync(args[4], password, cancellation.Token)
-                : await service.VerifyAsync(args[4], password, cancellation.Token);
+            object report = args[0] switch
+            {
+                "--backup-create" => await service.CreateAsync(args[4], password, cancellation.Token),
+                "--backup-rehearse" => await service.RehearseRecoveryAsync(args[4], password, cancellation.Token),
+                _ => await service.VerifyAsync(args[4], password, cancellation.Token)
+            };
             Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
             return 0;
         }

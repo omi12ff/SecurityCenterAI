@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('create', 'verify')][string]$Action = 'create',
+    [ValidateSet('create', 'verify', 'rehearse')][string]$Action = 'create',
     [string]$File,
     [string]$Directory = (Join-Path $env:LOCALAPPDATA 'SecurityCenterAI\Backups'),
     [System.Security.SecureString]$Passphrase,
@@ -11,7 +11,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ($Action -eq 'verify' -and [string]::IsNullOrWhiteSpace($File)) { throw 'Verify requires -File.' }
+if ($Action -in @('verify','rehearse') -and [string]::IsNullOrWhiteSpace($File)) { throw 'Verify/rehearse requires -File.' }
 if ($Action -eq 'create' -and $File) { throw 'Create chooses a new filename; omit -File.' }
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'database-environment.ps1')
@@ -53,7 +53,10 @@ try {
         if (-not [string]::Equals($passwordText, $confirmText, [StringComparison]::Ordinal)) { throw 'Passphrases do not match.' }
     }
     $mode = '--backup-create'; $targetFlag = '--directory'; $target = [IO.Path]::GetFullPath($Directory)
-    if ($Action -eq 'verify') { $mode = '--backup-verify'; $targetFlag = '--file'; $target = [IO.Path]::GetFullPath($File) }
+    if ($Action -in @('verify','rehearse')) {
+        $mode = $(if ($Action -eq 'rehearse') { '--backup-rehearse' } else { '--backup-verify' })
+        $targetFlag = '--file'; $target = [IO.Path]::GetFullPath($File)
+    }
     $arguments = @($assemblyPath, $mode, '--repository', $repositoryRoot, $targetFlag, $target)
     $start = New-Object System.Diagnostics.ProcessStartInfo
     $start.FileName = $dotnet

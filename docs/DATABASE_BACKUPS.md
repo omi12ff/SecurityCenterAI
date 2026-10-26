@@ -1,7 +1,7 @@
 # Copia cifrada y ensayo de recuperación
 
-Actualizado: 2026-10-23. Herramienta manual para PostgreSQL 16 local de Docker
-Compose en Windows. Incluye un ensayo de restauración; la programación y la
+Actualizado: 2026-10-25. Herramienta manual para PostgreSQL 16 local de Docker
+Compose en Windows. Incluye restauración temporal y ensayo de invalidación de accesos; la programación y la
 recuperación real del servicio siguen requiriendo su procedimiento operativo.
 
 ## Crear una copia
@@ -58,12 +58,24 @@ La autenticación del archivo ocurre **antes** de crear la base temporal. Una
 contraseña incorrecta o un archivo alterado no llegan a `pg_restore`. Si falla la
 comparación posterior a restaurar, tampoco se informa éxito y se retira la base.
 
+Para ampliar la comprobación con invalidación de sesiones, enlaces, agentes y
+cola exclusivamente en la temporal, usar `-Action rehearse` con el mismo `-File`.
+Verifica primero el inventario y luego la conservación del contenido después de
+retirar accesos. No conserva la temporal ni modifica el archivo de copia.
+Requiere el esquema revisado actual; copias anteriores pueden seguir admitiendo
+`verify` aunque no `rehearse`. [Comando, resultado y límites](RECOVERY_REHEARSAL.md).
+
 ## Contenido y consistencia
 
 Es una copia administrativa de la base, distinta de la exportación de cuenta.
 Incluye usuarios y hashes de contraseñas, sesiones, hashes de tokens/credenciales,
 dispositivos, análisis, hallazgos, feedback, catálogo, marcas mínimas y migraciones.
 Incluye también la tabla de actividad privada de seguridad incorporada después.
+La cola `account_email_outbox` se incluye con el contenido ya cifrado. El anillo
+DPAPI de correo no forma parte del dump ni del archivo de copia: permanece bajo
+el usuario Windows de la API. Una recuperación real debe retirar pendientes y
+tokens restaurados antes de habilitar SMTP; no se reproducen correos antiguos
+como parte del ensayo aislado. [Custodia](MAIL_DELIVERY.md).
 Debe custodiarse como información sensible aunque esté cifrada.
 
 Una transacción de lectura exporta una instantánea PostgreSQL. El inventario y
@@ -135,7 +147,9 @@ y archivos. No copia datos personales de la base habitual.
 
 También comprueba que cambiar una restricción CHECK altera la huella de esquema
 sin cambiar las huellas de las filas, y revierte ese cambio de prueba.
-En las pruebas habituales del backend, los tres ensayos PostgreSQL se omiten
+La suite añade cinco ensayos de preparación: rechazo real de accesos por API,
+nuevo login, conservación, rollback, destinos/esquemas desconocidos y limpieza.
+El CLI también ejecuta `rehearse`. En las pruebas habituales del backend, los ocho ensayos PostgreSQL se omiten
 explícitamente hasta ejecutar este script. Los casos de formato y cifrado no
 requieren Docker. `-DatabaseName` del helper está reservado al prefijo de fixtures.
 
@@ -149,8 +163,9 @@ una copia en esta misma PC no protege frente a la pérdida de la PC.
 Una copia antigua conserva datos borrados después y puede conservar hashes de
 accesos antes revocados. Antes de reabrir un servicio recuperado deben resolverse
 los borrados posteriores e invalidarse los accesos restaurados, con responsables
-y pérdida/tiempo de recuperación acordados. El ensayo aislado no reactiva esos
-accesos en la aplicación. La política operativa se mantiene en
+y pérdida/tiempo de recuperación acordados. `rehearse` prueba su invalidación
+solo en una temporal retirada; no concilia borrados ni sustituye el servicio.
+La política operativa se mantiene en
 [pendientes](PENDING_FEATURES.md).
 
 Referencias utilizadas: [pg_dump de PostgreSQL 16](https://www.postgresql.org/docs/16/app-pgdump.html),

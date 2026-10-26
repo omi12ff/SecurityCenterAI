@@ -22,7 +22,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not create isolated backup fixture.' }
     $created = $true
     [Environment]::SetEnvironmentVariable('SECURITY_CENTER_BACKUP_TEST_CONNECTION', $connection.ConnectionString, 'Process')
-    dotnet test 'tests/SecurityCenterAI.Tests/SecurityCenterAI.Tests.csproj' --configuration $Configuration --filter 'FullyQualifiedName~BackupPostgresTests' --logger 'console;verbosity=minimal'
+    dotnet test 'tests/SecurityCenterAI.Tests/SecurityCenterAI.Tests.csproj' --configuration $Configuration --filter 'FullyQualifiedName~BackupPostgresTests|FullyQualifiedName~RecoveryRehearsalPostgresTests' --logger 'console;verbosity=minimal'
     if ($LASTEXITCODE -ne 0) { throw 'Isolated PostgreSQL backup tests failed.' }
     $passphrase = ConvertTo-SecureString ([guid]::NewGuid().ToString('N') + ' ficticia ' + [char]0x00F1) -AsPlainText -Force
     $helper = Join-Path $PSScriptRoot 'backup.ps1'
@@ -32,12 +32,18 @@ try {
     $lines = & $helper -Action verify -File $result.file -DatabaseName $fixtureDatabase -Passphrase $passphrase -Configuration $Configuration -NoBuild
     $verified = ($lines -join [Environment]::NewLine) | ConvertFrom-Json
     if ($verified.status -ne 'verified') { throw 'Backup verification CLI contract failed.' }
+    $lines = & $helper -Action rehearse -File $result.file -DatabaseName $fixtureDatabase -Passphrase $passphrase -Configuration $Configuration -NoBuild
+    $rehearsed = ($lines -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($rehearsed.status -ne 'rehearsed-in-isolation' -or -not $rehearsed.preparation.contentPreserved -or
+        -not $rehearsed.preparation.accessInvalidationChecked -or $rehearsed.activeDatabaseReplaced -or $rehearsed.laterDeletionsReconciled) {
+        throw 'Isolated recovery rehearsal CLI contract failed.'
+    }
     $incorrect = ConvertTo-SecureString 'incorrect fictitious backup passphrase' -AsPlainText -Force
     $rejected = $false
     try { & $helper -Action verify -File $result.file -DatabaseName $fixtureDatabase -Passphrase $incorrect -Configuration $Configuration -NoBuild }
     catch { if ($_.Exception.Message -like '*exit 5*') { $rejected = $true } else { throw } }
     if (-not $rejected) { throw 'Wrong-password CLI check failed.' }
-    Write-Output 'Isolated backup/restore, CLI and wrong-password checks passed.'
+    Write-Output 'Isolated backup/restore, security rehearsal, CLI and wrong-password checks passed.'
 }
 finally {
     [Environment]::SetEnvironmentVariable('SECURITY_CENTER_BACKUP_TEST_CONNECTION', $previousConnection, 'Process')

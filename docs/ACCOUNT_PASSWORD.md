@@ -20,9 +20,9 @@ devuelven ninguna contraseña al cliente.
   contenido y acceso independiente de agentes, revocable en Dispositivos.
 - Registra `password.changed` sin secretos, id de sesión o texto libre. Es distinto
   de `password.reset` por recuperación y se incluye en la exportación existente.
-- Intenta enviar un aviso posterior al commit sin contraseñas o enlaces de acceso.
-  La cola sigue siendo de memoria: un fallo o reinicio puede perderlo. No recibir
-  el aviso no revierte ni permite deducir el resultado del cambio.
+- Guarda un aviso cifrado sin contraseñas o enlaces de acceso en el mismo commit.
+  El worker lo entrega después y conserva intentos tras reinicios. No recibir
+  el aviso no permite deducir el resultado del cambio; SMTP no confirma bandeja final.
 
 La web borra sus dos cookies al confirmar. Otros navegadores pueden conservar
 cookies hasta su siguiente intento, pero el servidor rechaza su acceso. Ante una
@@ -44,9 +44,9 @@ minutos con las opciones actuales. Los límites por IP son de una instancia y la
 llamadas intermediadas por Next.js comparten dirección.
 
 En PostgreSQL bloquea la fila del usuario y vuelve a comprobar la sesión.
-Hash, revocaciones, enlaces y evento se confirman en la misma transacción,
+Hash, revocaciones, enlaces, evento y registro de correo se confirman en la misma transacción,
 coordinados mediante versiones con login/refresh/reset/borrado. Un fallo del
-evento impide el cambio; el correo se intenta después de confirmar la escritura.
+evento o al guardar la cola impide el cambio; SMTP se intenta después de confirmar la escritura.
 
 ## Migración y alcance
 
@@ -55,10 +55,10 @@ columnas ni modifica claves o contenido existentes. El downgrade no borra o
 reinterpreta eventos: el CHECK anterior rechaza el retorno mientras existan
 entradas `PasswordChanged`. Requiere planificar un rollback compatible.
 
-Siguen pendientes un corpus amplio de contraseñas comprometidas, MFA y correo durable para producción.
+Siguen pendientes un corpus amplio de contraseñas comprometidas, MFA y operación de correo de producción.
 El mínimo actual no completa esas políticas. El aviso del cambio autenticado se
 complementa con un aviso posterior a recuperación, sin enlaces o credenciales.
-Ambos siguen usando la cola volátil; [correo y cancelaciones](ACCOUNT_EMAIL_CHANGE.md).
+Ambos usan la [cola cifrada persistente](MAIL_DELIVERY.md); [correo y cancelaciones](ACCOUNT_EMAIL_CHANGE.md).
 La purga técnica no cambia su alcance.
 
 Referencia: [OWASP: cambio de contraseña](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#change-password-feature).

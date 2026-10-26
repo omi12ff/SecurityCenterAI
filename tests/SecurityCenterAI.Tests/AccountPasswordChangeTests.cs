@@ -138,27 +138,19 @@ public sealed class AccountPasswordChangeTests
     }
 
     [Fact]
-    public async Task RateLimitStopsMutationAndFailedNotificationCannotRollBackTheCommittedChange()
+    public async Task RateLimitAndFailureToStageTheNoticePreventTheChange()
     {
         using var limited = new AccountApiFactory(accountPasswordPermitLimit: 1); using var client = limited.CreateApiClient();
         var account = AccountCredentials.New(); var owner = await limited.RegisterAsync(client, account);
         using var wrong = await ChangeAsync(client, owner, "incorrecta"); Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
         using var blocked = await ChangeAsync(client, owner, account.Password); Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
         using var factory = new AccountApiFactory();
-        using var configured = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
-        {
-            services.RemoveAll<IAccountEmailSender>();
-            services.AddSingleton<IAccountEmailSender>(new FailingNotice(factory.Email));
-        }));
-        using var otherClient = configured.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+        using var otherClient = factory.CreateApiClient();
         var own = await factory.RegisterAsync(otherClient, account);
-        using var changed = await ChangeAsync(otherClient, own, account.Password); Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
-        await AccountSessionManagementTests.LoginAsync(otherClient, account with { Password = NewPassword });
-    }
-
-    private sealed class FailingNotice(IAccountEmailSender other) : IAccountEmailSender
-    {
-        public Task SendAsync(AccountEmail message, CancellationToken cancellationToken) => message.Purpose == AccountEmailPurpose.PasswordChanged
-            ? throw new InvalidOperationException("Fictitious transport failure with private details") : other.SendAsync(message, cancellationToken);
+        factory.Email.RejectedPurpose = AccountEmailPurpose.PasswordChanged;
+        using var changed = await ChangeAsync(otherClient, own, account.Password); Assert.Equal(HttpStatusCode.InternalServerError, changed.StatusCode);
+        await AccountSessionManagementTests.LoginAsync(otherClient, account);
+        using var request = AccountApiFactory.AuthorizedRequest(HttpMethod.Get, "/api/auth/me", own.AccessToken);
+        using var unchanged = await otherClient.SendAsync(request); Assert.Equal(HttpStatusCode.OK, unchanged.StatusCode);
     }
 }

@@ -12,8 +12,7 @@ using SecurityCenterAI.Infrastructure.Persistence;
 namespace SecurityCenterAI.Api.Services;
 
 public sealed class AccountEmailChangeService(AppDbContext database, IPasswordHasher<User> passwords,
-    IOptions<AuthSecurityOptions> settings, TimeProvider clock, IAccountEmailSender email,
-    ILogger<AccountEmailChangeService> logger)
+    IOptions<AuthSecurityOptions> settings, TimeProvider clock, IAccountEmailSender email)
 {
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 
@@ -31,7 +30,7 @@ public sealed class AccountEmailChangeService(AppDbContext database, IPasswordHa
             target.Length > 320 || !new EmailAddressAttribute().IsValid(target))
             throw new DeviceOperationException(400, "Revisá el correo nuevo y confirmá que tenés acceso a ambas direcciones.");
         var currentToken = OpaqueToken.Create(); var newToken = OpaqueToken.Create();
-        var original = await WriteAsync(userId, sessionId, request.CurrentPassword, async user =>
+        await WriteAsync(userId, sessionId, request.CurrentPassword, async user =>
         {
             if (target == user.Email || await database.Users.AnyAsync(item => item.Email == target, cancellationToken))
                 throw new DeviceOperationException(409, "No se puede usar esa dirección para el cambio.");
@@ -49,10 +48,10 @@ public sealed class AccountEmailChangeService(AppDbContext database, IPasswordHa
             pending.CreatedAtUtc = Now; pending.ExpiresAtUtc = Now.AddMinutes(settings.Value.EmailChangeMinutes);
             pending.CurrentConfirmedAtUtc = null; pending.NewConfirmedAtUtc = null; pending.ConcurrencyStamp = Guid.NewGuid();
             user.LastVerificationSentAtUtc = Now;
+            await email.QueueAsync(userId, new(user.Email, currentToken, AccountEmailPurpose.EmailChangeCurrent), cancellationToken);
+            await email.QueueAsync(userId, new(target, newToken, AccountEmailPurpose.EmailChangeNew), cancellationToken);
             return user.Email;
         }, cancellationToken);
-        await NotifyAsync(new(original, currentToken, AccountEmailPurpose.EmailChangeCurrent), cancellationToken);
-        await NotifyAsync(new(target, newToken, AccountEmailPurpose.EmailChangeNew), cancellationToken);
     }
 
     public async Task ConfirmAsync(string token, bool currentAddress, bool confirmed, CancellationToken cancellationToken)
@@ -88,7 +87,7 @@ public sealed class AccountEmailChangeService(AppDbContext database, IPasswordHa
     {
         if (!request.Confirmed || string.IsNullOrEmpty(request.CurrentPassword) || request.CurrentPassword.Length > 128)
             throw new DeviceOperationException(400, "Confirmá el cambio y el cierre de sesiones web, e ingresá tu contraseña actual.");
-        var changed = await WriteAsync(userId, sessionId, request.CurrentPassword, async user =>
+        await WriteAsync(userId, sessionId, request.CurrentPassword, async user =>
         {
             var pending = await FindPendingAsync(user, request.RequestId, cancellationToken);
             if (pending.ExpiresAtUtc <= Now || !pending.CurrentConfirmedAtUtc.HasValue || !pending.NewConfirmedAtUtc.HasValue)
@@ -103,10 +102,10 @@ public sealed class AccountEmailChangeService(AppDbContext database, IPasswordHa
             foreach (var item in tokens) { item.ConsumedAtUtc = Now; item.ConcurrencyStamp = Guid.NewGuid(); }
             database.EmailChangeRequests.Remove(pending);
             SecurityActivityRecorder.Add(database, userId, SecurityActivityKind.EmailChanged, Now);
+            await email.QueueAsync(userId, new(previous, "", AccountEmailPurpose.EmailChanged), cancellationToken);
+            await email.QueueAsync(userId, new(user.Email, "", AccountEmailPurpose.EmailChanged), cancellationToken);
             return (Previous: previous, Current: user.Email);
         }, cancellationToken);
-        await NotifyAsync(new(changed.Previous, "", AccountEmailPurpose.EmailChanged), cancellationToken);
-        await NotifyAsync(new(changed.Current, "", AccountEmailPurpose.EmailChanged), cancellationToken);
     }
 
     private async Task<EmailChangeRequest> FindPendingAsync(User user, Guid requestId, CancellationToken cancellationToken)
@@ -167,11 +166,6 @@ public sealed class AccountEmailChangeService(AppDbContext database, IPasswordHa
         throw new DeviceOperationException(409, "Otra operación modificó la cuenta. Actualizá Mi cuenta antes de volver a intentar.");
     }
 
-    private async Task NotifyAsync(AccountEmail message, CancellationToken cancellationToken)
-    {
-        try { await email.SendAsync(message, cancellationToken); }
-        catch (Exception) { logger.LogWarning(SafeOperationalLogging.EmailQueueRejected, "No se pudo encolar un correo del cambio de dirección."); }
-    }
     private static DeviceOperationException InvalidLink() => new(400, "El enlace no es válido o ya venció. Revisá la solicitud desde Mi cuenta.");
     private static DeviceOperationException Unconfirmed() => new(403, "No pudimos confirmar tu contraseña. Revisala o esperá antes de intentar de nuevo.");
     private static bool Retryable(Exception exception) => exception is DbUpdateConcurrencyException ||

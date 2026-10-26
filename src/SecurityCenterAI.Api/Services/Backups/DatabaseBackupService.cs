@@ -8,6 +8,8 @@ using Npgsql;
 namespace SecurityCenterAI.Api.Services.Backups;
 
 public sealed record BackupResult(string Status, string File, DateTime SnapshotAtUtc, int TablesVerified);
+public sealed record RecoveryRehearsalResult(string Status, string File, DateTime SnapshotAtUtc, int TablesVerified,
+    RestoredAccessReport Preparation, bool ActiveDatabaseReplaced = false, bool LaterDeletionsReconciled = false);
 public sealed class BackupCleanupException(string database) : Exception("No se confirmó la creación o retirada de la base temporal.")
 {
     public string Database { get; } = database;
@@ -79,7 +81,18 @@ public sealed class DatabaseBackupService
         }
     }
 
-    public async Task<BackupResult> VerifyAsync(string file, string password, CancellationToken cancellationToken)
+    public async Task<BackupResult> VerifyAsync(string file, string password, CancellationToken cancellationToken) =>
+        (await RestoreAndCheckAsync(file, password, false, cancellationToken)).Backup;
+
+    public async Task<RecoveryRehearsalResult> RehearseRecoveryAsync(string file, string password, CancellationToken cancellationToken)
+    {
+        var result = await RestoreAndCheckAsync(file, password, true, cancellationToken);
+        return new("rehearsed-in-isolation", result.Backup.File, result.Backup.SnapshotAtUtc,
+            result.Backup.TablesVerified, result.Preparation ?? throw new InvalidOperationException("El ensayo no completó su preparación."));
+    }
+
+    private sealed record VerifiedRestore(BackupResult Backup, RestoredAccessReport? Preparation);
+    private async Task<VerifiedRestore> RestoreAndCheckAsync(string file, string password, bool prepareRecovery, CancellationToken cancellationToken)
     {
         BackupEnvelope.ValidatePassword(password);
         byte[]? payload = null, dump = null;
@@ -100,6 +113,7 @@ public sealed class DatabaseBackupService
             payload = BackupEnvelope.Decrypt(encrypted, password);
             var unpacked = BackupPackage.Unpack(payload);
             var manifest = unpacked.Manifest; dump = unpacked.Dump;
+            RestoredAccessReport? preparation = null;
             var maintenance = new NpgsqlConnectionStringBuilder(_connection.ConnectionString) { Database = "postgres" };
             await using (var source = new NpgsqlConnection(maintenance.ConnectionString))
             { await source.OpenAsync(cancellationToken); await RequirePostgres16Async(source, cancellationToken); }
@@ -123,14 +137,18 @@ public sealed class DatabaseBackupService
             await using (var restored = new NpgsqlConnection(restoredConnection.ConnectionString))
             {
                 await restored.OpenAsync(cancellationToken);
-                await using var transaction = await restored.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
-                var actual = await BackupInventoryReader.ReadAsync(restored, transaction, cancellationToken);
-                if (!BackupInventoryReader.Same(manifest.Inventory, actual))
-                    throw new InvalidDataException($"La copia restaurada no coincide con su inventario. Esquema coincidente: {manifest.Inventory.SchemaSha256 == actual.SchemaSha256}; tablas distintas: " +
-                        string.Join(",", manifest.Inventory.Tables.Except(actual.Tables).Select(table => table.Name)));
-                await transaction.CommitAsync(cancellationToken);
+                await using (var transaction = await restored.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken))
+                {
+                    var actual = await BackupInventoryReader.ReadAsync(restored, transaction, cancellationToken);
+                    if (!BackupInventoryReader.Same(manifest.Inventory, actual))
+                        throw new InvalidDataException($"La copia restaurada no coincide con su inventario. Esquema coincidente: {manifest.Inventory.SchemaSha256 == actual.SchemaSha256}; tablas distintas: " +
+                            string.Join(",", manifest.Inventory.Tables.Except(actual.Tables).Select(table => table.Name)));
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                if (prepareRecovery)
+                    preparation = await RestoredAccessReset.PrepareAsync(restored, temporary, manifest.Inventory, cancellationToken);
             }
-            return new("verified", Path.GetFullPath(file), manifest.CreatedAtUtc, manifest.Inventory.Tables.Length);
+            return new(new("verified", Path.GetFullPath(file), manifest.CreatedAtUtc, manifest.Inventory.Tables.Length), preparation);
         }
         finally
         {

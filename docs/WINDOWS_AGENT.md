@@ -296,4 +296,7 @@ El recorrido manual de [ingesta y puntos confirmados](ANALYSIS_INGESTION.md)
 conecta estas comprobaciones con la web. El paquete portátil prepara pruebas
 privadas supervisadas; la distribución externa firmada, automatización,
 compatibilidad ampliada e infraestructura externa siguen pendientes en
-[ROADMAP.md](../ROADMAP.md). Se eligieron guías locales sin IA externa.
+[ROADMAP.md](../ROADMAP.md). La decisión inicial fue usar guías locales sin IA
+externa. El 2026-10-25 se autorizó añadir [explicación opcional por análisis](AI_EXPLANATIONS.md),
+desactivada por defecto, sin inferencia externa comprobada y sin cambiar las comprobaciones,
+puntos o cobertura. Las guías locales se conservan siempre.

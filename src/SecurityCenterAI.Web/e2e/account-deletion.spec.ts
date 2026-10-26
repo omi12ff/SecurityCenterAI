@@ -1,3 +1,4 @@
+import { postgresExecArgs } from './database.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -18,7 +19,7 @@ function storedCounts(account: TestAccount, userId: string, deviceIds: string[])
   while (!existsSync(join(root, 'SecurityCenterAI.sln'))) {
     const parent = dirname(root); if (parent === root) throw new Error('Repository root not found.'); root = parent;
   }
-  const result = spawnSync('docker', ['compose', 'exec', '-T', 'postgres', 'sh', '-c',
+  const result = spawnSync('docker', [...postgresExecArgs(), 'sh', '-c',
     'psql -X -A -t --set=ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=owner_id="$1" --set=devices="$2"',
     'account-deletion-e2e', userId, deviceIds.join(',')], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 30_000,
     input: `
@@ -96,9 +97,10 @@ test('Mi cuenta exige contraseña y confirmación, elimina en móvil y limpia la
   await loginAccount(page, account);
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto('/account');
-  const password = page.getByLabel('Contraseña actual', { exact: true });
-  const confirmation = page.getByLabel('Escribí ELIMINAR para confirmar', { exact: true });
-  const remove = page.getByRole('button', { name: 'Eliminar mi cuenta', exact: true });
+  const deletion = page.getByRole('region', { name: 'Eliminar mi cuenta', exact: true });
+  const password = deletion.getByLabel('Contraseña actual', { exact: true });
+  const confirmation = deletion.getByLabel('Escribí ELIMINAR para confirmar', { exact: true });
+  const remove = deletion.getByRole('button', { name: 'Eliminar mi cuenta', exact: true });
   await remove.click();
   expect(await password.evaluate(element => (element as HTMLInputElement).validity.valueMissing)).toBe(true);
   await password.fill('Wrong-Synthetic-Password'); await confirmation.fill('ELIMINAR'); await remove.click();

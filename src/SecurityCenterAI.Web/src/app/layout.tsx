@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "./design-system.css";
 
 export const metadata: Metadata = {
   title: { default: "Security Center AI", template: "%s · Security Center AI" },

@@ -1,6 +1,32 @@
 # Notas de privacidad e inventario de datos
 
-Revisión documental: **24 de octubre de 2026**.
+Revisión documental: **26 de octubre de 2026**.
+
+La explicación opcional de IA por análisis está desactivada por defecto. En esta
+instalación el usuario habilitó la configuración con su clave de producto y el
+modelo `openrouter/free`; la API ya se reinició con el alias corregido y quedó
+habilitada para una consulta explícita desde la interfaz. Se leyó
+el catálogo autorizado, sin comprobar inferencia externa ni enviar un análisis al
+proveedor. Cada consulta posterior requiere confirmación y envía a OmniRoute/proveedor solo puntos,
+cobertura y el identificador/versión/estado de las diez reglas, con títulos,
+descripciones y límites del catálogo local. Excluye evidencia libre, nombres,
+correo, identificadores de cuenta/equipo/informe, fechas, feedback y archivos.
+No es una conversación ni permite escribir un prompt. [Datos y controles](docs/AI_EXPLANATIONS.md).
+
+La aplicación no persiste prompts o resultados de este módulo ni los incorpora
+a exportaciones/backups; el resultado se mantiene solo en memoria de la página.
+El contador de intentos por propietario/día UTC y las reservas de concurrencia
+son temporales en memoria de la API y se restablecen al reiniciar. No se envía el
+identificador del propietario al proveedor. El gateway y proveedor tienen
+condiciones propias: desactivar logs locales no garantiza ausencia de conservación
+externa; revisar destinatario, ubicación, retención y permisos antes de habilitar.
+
+El diagnóstico operativo local de la cola lee solo contadores y fechas mediante
+una consulta agregada en transacción READ ONLY. No selecciona contenido cifrado,
+destinatarios, tokens, ids de usuario/mensaje o claves. El resumen se imprime en
+la terminal, sin nuevo almacenamiento o envío. Quien tenga acceso a la herramienta
+local y `.env` puede observar volumen y antigüedad globales; no es información
+publicada por HTTP o visible entre cuentas. [Uso y límites](docs/EMAIL_QUEUE_DIAGNOSTICS.md).
 
 Las páginas `/privacy` y `/terms` describen este estado como borradores; faltan
 responsable, país y contacto para finalizarlas. `/report-problem` prepara un
@@ -19,8 +45,9 @@ no ejecuta esos comandos. [Datos y límites](docs/GETTING_STARTED.md).
 La política de claves nuevas se evalúa localmente: no se envían candidatos a un
 servicio de filtraciones ni se guardan en errores/logs. El límite de sesiones por
 cuenta reutiliza datos existentes, sin añadir IP, ubicación o navegador. La cola
-SMTP conserva destinatario/token en memoria con intentos y antigüedad acotados;
-los reintentos no incorporan persistencia o seguimiento de destinatarios. El
+SMTP recibe material descifrado solo para intentar entregarlo. La cola conserva
+destinatario/token/propósito cifrados en PostgreSQL, con intentos y vigencia
+acotados; las claves permanecen bajo DPAPI del usuario Windows de la API. El
 diagnóstico NOOP local no envía mensajes. [Política](docs/ACCOUNT_SECURITY_POLICY.md)
 y [correo](docs/MAIL_DELIVERY.md).
 
@@ -30,7 +57,7 @@ distinguen de los datos y mecanismos que contiene el repositorio.
 
 ## Datos de PostgreSQL
 
-El modelo de EF Core contiene quince tablas, incluidas feedback, actividad,
+El modelo de EF Core contiene dieciséis tablas, incluidas feedback, actividad,
 cambio de correo, cuotas y marcas de análisis eliminados. La tabla siguiente usa
 los nombres físicos de PostgreSQL: las once columnas de `users` están en español
 y sus propiedades C# mantienen los nombres originales. Las equivalencias están
@@ -66,6 +93,7 @@ Las navegaciones no agregan columnas.
 | `deleted_analysis_reports` | `id_dispositivo`, `id_informe_agente`, `fecha_eliminacion_utc` | Marca mínima por dispositivo/reporte para rechazar reingesta con `410`. Sin hash, puntos, evidencia o comentario. FK al dispositivo con borrado físico en cascada; sin purga automática mientras exista. |
 | `security_activity` | `id_evento`, `id_usuario`, `tipo_evento`, `fecha_evento_utc` | Actividad privada de catorce acciones completadas, sin texto libre, IP, secretos o identificadores de sesiones/dispositivos/informes. Se conserva mientras exista la cuenta, sin purga automática; FK con cascada ante borrado de cuenta. |
 | `link_message_usage` | `id_usuario`, `dia_utc`, `consultas_realizadas`, `version_concurrencia` | Estado del límite combinado de enlaces/mensajes: una fila del último día usado por cuenta. No contiene entradas, hashes o resultados. Se sustituye en un uso posterior y se elimina con la cuenta. |
+| `account_email_outbox` | `id_correo`, `id_usuario`, `contenido_cifrado`, fechas de creación/expiración/próximo intento, intentos, reserva/vencimiento y versión | Material recuperable cifrado de entrega: destinatario, token y propósito. Ligado a usuario/fila. Se retira al entregar, vencer o descartar; cascada al borrar cuenta. No se incluye en exportación de cuenta; sí en backup administrativo. Claves separadas bajo DPAPI. |
 
 `User.Analyses`, `SecurityAnalysis.User`, `UserSession.User`,
 `RefreshCredential.Session` y `AccountActionToken.User` son navegaciones.
@@ -228,10 +256,15 @@ web `8025`. Los mensajes incluyen destinatario, remitente, asunto, texto y
 enlace con el token portador. No son simplemente diagnósticos anónimos; quien
 acceda a la bandeja puede usar un enlace vigente.
 
-Antes de SMTP, la API conserva temporalmente destinatario, token y propósito
-en una cola en memoria de hasta 100 mensajes. No es una tabla ni una cola
-durable: reiniciar el proceso o fallar SMTP puede perder la entrega; los hashes
-guardados y el tiempo de espera para reenviar permanecen en la base.
+Antes de SMTP, la API conserva destinatario, token y propósito cifrados en
+`account_email_outbox`, con fechas, intentos y una reserva temporal. Se confirma
+junto con la operación de cuenta y puede recuperarse tras reiniciar. El worker
+retira filas entregadas, vencidas, inválidas o agotadas; apagado no ejecuta limpieza.
+Los enlaces se revalidan antes de enviar. Puede haber duplicados ante una respuesta
+SMTP perdida; no existe historial de entrega, lectura o destinatarios adicionales.
+Las claves DPAPI se guardan en LocalAppData fuera del repositorio y no viajan en
+el backup de la base. Otras identidades/máquinas requieren custodia y configuración
+propias. [Datos, vigencia y recuperación](docs/MAIL_DELIVERY.md).
 
 La aplicación usa `Email:Host`, `Port`, `From`, `Username`,
 `Password` y `EnableSsl`. En Development/Testing se exige host loopback;
@@ -257,9 +290,13 @@ antes de utilizar datos reales.
 | Pruebas | Cuentas ficticias únicas; la suite E2E elimina sus registros por correo exacto y borrado en cascada. | Interrumpir una suite puede dejar cuentas o mensajes de prueba. Las trazas, vídeos y capturas automáticas están deshabilitados. |
 | Herramientas del entorno | Editor, extensiones, Docker Desktop y SDK tienen diagnósticos y telemetría propios. | Sus configuraciones no equivalen a una política del producto y no están controladas por estas entidades. |
 
-No hay integración de analítica de uso de producto, proveedor de IA, pagos ni
-almacenamiento de archivos personales. Esto no describe servicios externos
-que el desarrollador use fuera de la aplicación.
+No hay integración de analítica de uso de producto, pagos o almacenamiento de
+archivos personales. El adaptador opcional de IA se entrega desactivado; el usuario
+habilitó su configuración local con clave de producto y modelo `openrouter/free`,
+con la API ya reiniciada y habilitada para una consulta explícita desde la
+interfaz, sin inferencia externa comprobada.
+Los servicios que el desarrollador use fuera de la
+aplicación tienen un alcance separado.
 
 ## Retención, borrado y backups
 
@@ -328,10 +365,10 @@ plazos y responsables para base, mensajes, logs y copias.
 
 | Tema | Actual | Propuesta pendiente |
 | --- | --- | --- |
-| Consentimiento | No hay registro de consentimiento ni preferencias de recopilación. | Informar por módulo qué se recoge, qué sale del equipo, finalidad y borrado. |
+| Consentimiento | Confirmación por consulta de IA y del detector, sin historial persistente de esas confirmaciones. No hay preferencias generales de recopilación. | Informar por módulo qué se recoge, qué sale del equipo, finalidad y borrado; revisar requisitos de operación externa. |
 | Equipo Windows | Consola manual con diez comprobaciones y evidencia seleccionada. El envío explícito incorpora UUID de reporte, versiones, fechas y estados/evidencias; no hay inventario de hardware, drivers o aplicaciones. | Distribución, operación y revisión de compatibilidad del agente. |
 | Archivos y navegación | Sin cargas de capturas, mensajes, archivos ni historial de navegación. | Selección explícita, minimización, límites y retención antes de habilitarlas. |
-| IA | Sin proveedor ni prompts/conversaciones enviados o almacenados. | Elegir proveedor, contexto reducido, autorización y retención antes de integrar. |
+| IA | Explicación opcional por análisis, desactivada por defecto. El usuario habilitó su configuración con clave y `openrouter/openrouter/free`; ruta con proveedor explícito validada con datos ficticios, API reiniciada y habilitada para una consulta explícita desde la interfaz. Contexto reducido sin evidencia libre/datos personales; resultados solo en memoria y sin conversaciones. Se comprobó una respuesta real con diez estados ficticios; no se utilizó el informe personal. | Revisar destinatario, ubicación, retención y costos antes de una consulta confirmada y comprobar inferencia real. Límites actuales en memoria no coordinan varias instancias. |
 | Control de la cuenta | Perfil, correo, recuperación, revocación de accesos, exportación y borrado de cuenta con contraseña/confirmación. | Preferencias de recopilación y retención/operación de copias. |
 | Hallazgos | Ingesta de diez resultados, consulta, exportación JSON y borrado individual con feedback y marca mínima. El resultado se identifica como limitado y autodeclarado. | Retención automática, tratamiento de copias y revisión de nuevas categorías antes de ampliar las comprobaciones. |
 | Métricas | Sin seguimiento de activación, retorno o resolución. | Definir finalidad, campos mínimos y retención antes de instrumentar. |

@@ -20,6 +20,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AnalysisFeedback> AnalysisFeedback => Set<AnalysisFeedback>();
     public DbSet<DeletedAnalysisReport> DeletedAnalysisReports => Set<DeletedAnalysisReport>();
     public DbSet<SecurityActivity> SecurityActivities => Set<SecurityActivity>();
+    public DbSet<AccountEmailOutbox> AccountEmailOutbox => Set<AccountEmailOutbox>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -103,6 +104,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(item => item.Checks).HasColumnName("consultas_realizadas");
             entity.Property(item => item.ConcurrencyStamp).HasColumnName("version_concurrencia").IsConcurrencyToken();
             entity.HasOne(item => item.User).WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AccountEmailOutbox>(entity =>
+        {
+            entity.ToTable("account_email_outbox", table =>
+            {
+                table.HasCheckConstraint("CK_account_email_outbox_intentos", "intentos >= 0 AND intentos <= 5");
+                table.HasCheckConstraint("CK_account_email_outbox_vigencia", "fecha_expiracion_utc > fecha_creacion_utc");
+                table.HasCheckConstraint("CK_account_email_outbox_reserva", "(id_reserva IS NULL) = (fecha_fin_reserva_utc IS NULL)");
+            });
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).HasColumnName("id_correo");
+            entity.Property(item => item.UserId).HasColumnName("id_usuario");
+            entity.Property(item => item.ProtectedPayload).HasColumnName("contenido_cifrado").HasMaxLength(8192).IsRequired();
+            entity.Property(item => item.CreatedAtUtc).HasColumnName("fecha_creacion_utc");
+            entity.Property(item => item.ExpiresAtUtc).HasColumnName("fecha_expiracion_utc");
+            entity.Property(item => item.NextAttemptAtUtc).HasColumnName("fecha_proximo_intento_utc");
+            entity.Property(item => item.Attempts).HasColumnName("intentos");
+            entity.Property(item => item.LeaseId).HasColumnName("id_reserva");
+            entity.Property(item => item.LeaseExpiresAtUtc).HasColumnName("fecha_fin_reserva_utc");
+            entity.Property(item => item.ConcurrencyStamp).HasColumnName("version_concurrencia").IsConcurrencyToken();
+            entity.HasIndex(item => new { item.NextAttemptAtUtc, item.Id });
+            entity.HasIndex(item => item.ExpiresAtUtc);
+            entity.HasOne<User>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<EmailChangeRequest>(entity =>

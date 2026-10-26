@@ -1,8 +1,13 @@
 # Contexto de Security Center AI
 
-Última revisión: **2026-10-24**. Este archivo sirve para retomar el proyecto y
+Última revisión: **2026-10-26**. Este archivo sirve para retomar el proyecto y
 distinguir lo implementado de lo previsto. Las instrucciones de ejecución están
 en [README.md](README.md).
+
+La dirección visual vigente está en [DESIGN.md](DESIGN.md), con tokens y una
+referencia HTML local. Ya se aplica a las superficies compartidas de la web y
+al detalle progresivo de las comprobaciones. Las herramientas instaladas y sus
+límites de conexión están en [docs/DESIGN_TOOLING.md](docs/DESIGN_TOOLING.md).
 
 ## Visión del producto
 
@@ -25,7 +30,32 @@ en `docs/`. Su versión documental no equivale a una versión publicada del prod
 **Prioridad acordada el 2026-10-24:** completar la primera versión **1.0 gratuita**
 de la guía, con [plan de cierre](docs/RELEASE_1_0.md). El usuario pospuso otra PC/VM;
 no se interpreta como validación de compatibilidad. Se prioriza producto sobre
-nuevas ampliaciones operativas y se conserva la elección de guías sin IA externa.
+nuevas ampliaciones operativas. Las guías locales se conservan como base.
+
+**Decisión posterior, 2026-10-25:** el usuario autorizó una explicación opcional
+de IA por análisis, con consentimiento por consulta y contexto reducido; no pidió
+un chatbot. Se incorpora desactivada por defecto y sin inferencia externa
+comprobada. No modifica puntos/cobertura ni ejecuta acciones.
+La visión de escritorio con bandeja y vigilancia/autonomía por plan sigue siendo
+futura y requiere alcance y autorizaciones explícitos. [Uso y límites](docs/AI_EXPLANATIONS.md).
+
+**Herramienta de desarrollo, 2026-10-25:** OmniRoute 3.8.52 instalado localmente y
+conexión MCP de apoyo registrada en Codex. Clave DPAPI con modelos inicialmente
+bloqueados; consultas desactivadas hasta configurar una cuenta gratuita/modelo.
+Ese apoyo conserva su clave y configuración separadas de la explicación opcional
+de la app. El producto conserva sus reglas/guías locales.
+[Estado y uso](docs/OMNIROUTE_DEVELOPMENT.md).
+
+**Estado observado el 2026-10-26:** OmniRoute ya tiene contraseña y configuración
+inicial completadas. El usuario configuró la conexión OpenRouter SecurityAI y
+habilitó el producto con una clave separada; informó gestión desactivada, acceso
+solo a esa conexión, `noLog` activado y compresión de prompts desactivada. El
+catálogo devolvió `openrouter/free`, pero su uso real fue rechazado por ambiguo.
+La clave y la app ahora fijan `openrouter/openrouter/free`: un ensayo real del
+adaptador devolvió resumen y diez reglas válidas con estados ficticios, sin
+usar el informe personal. El usuario pidió retirar la casilla; el envío sigue
+siendo explícito al pulsar el botón junto al aviso. El MCP de desarrollo sigue
+sin inferencia habilitada y sus permisos de modelo no se cambiaron.
 
 **Recordatorio solicitado el 2026-10-24:** todavía faltan el nombre del responsable,
 el país de operación y el correo público de contacto. Recordárselo al usuario al
@@ -50,29 +80,29 @@ con marca mínima para impedir que un reintento restaure un informe eliminado.
 | Persistencia | PostgreSQL y EF Core: usuarios, análisis, sesiones y tokens de cuenta; migraciones versionadas. |
 | Dashboard | Endpoint protegido que devuelve el último puntaje, el total y hasta cinco análisis recientes del usuario. |
 | Swagger | Configurado para el entorno Development. |
-| Estado de la API | Liveness HTTP y readiness PostgreSQL acotado, 200/503 sin detalles. `scripts/status.ps1` consulta ambos y comprueba SMTP NOOP en loopback sin envío. |
+| Estado de la API | Liveness/readiness y SMTP NOOP locales. `scripts/status.ps1` agrega cola con contadores, antigüedad y avisos de solo lectura; salidas 0/3/1. No prueba worker activo o entrega. [Uso](docs/EMAIL_QUEUE_DIAGNOSTICS.md). |
 | Desarrollo local | Docker Compose para PostgreSQL y Mailpit; `scripts/dev.ps1` para iniciar, migrar o probar. |
-| Pruebas del backend | 251 habituales aprobadas de nuevo en `ReleaseClosureQa`; las 23 PostgreSQL omitidas allí aprobaron aparte: 16 de cuentas/actividad, 4 de retención y 3 de backup. |
+| Pruebas del backend | 390 aprobadas, incluidas 118 de IA, y 40 PostgreSQL omitidas explícitamente en la suite habitual; las 40 conservan su corrida separada en cuatro bases temporales. Compilación y repetición tras parchear dependencias de pruebas correctas. [Evidencia](docs/VERIFICATION.md). |
 | Frontend Next.js | Next.js 16.4.2, React 19.3.1 y TypeScript 5.9.3; registro, login, dashboard y gestión de cuenta en español. |
 | Sesión web | Access y refresh tokens en cookies `HttpOnly`, `SameSite=Lax`, `Secure` en producción; renovación rotatoria y revocación en el backend. |
 | Sesiones activas | Inventario propio paginado y cierre confirmado. Máximo diez habilitadas por cuenta, configurable 1–100 y coordinado por versión en PostgreSQL; refresh no consume lugar nuevo. Mantiene autorización independiente del agente. |
 | Cambio de contraseña | Desde Mi cuenta con contraseña actual/nueva y confirmación. Cierra sesiones web e invalida recuperación pendiente, conserva agentes y registra evento; aviso posterior de mejor esfuerzo. |
 | Nombre del perfil | Editable en Mi cuenta; 2–100 caracteres, espacios exteriores recortados y sin controles. Dashboard y Dispositivos consultan el perfil actual sin renovar tokens o cerrar sesiones. |
 | Cambio de correo | Reautenticación al solicitar y finalizar, confirmación de ambas direcciones, cancelación y cierre web. Conserva equipos y contenido; cambio/reset de clave cancelan solicitudes. Recuperación agrega aviso sin enlaces. |
-| Correo y recuperación | Mailpit local y enlaces de un uso; cola volátil con reintentos SMTP acotados, descarte por antigüedad y logs mínimos. Sin durabilidad o proveedor externo elegido. |
+| Correo y recuperación | Cola cifrada persistente en PostgreSQL, atómica con la operación, reservas y reintentos recuperables. Claves DPAPI del usuario Windows de la API. Mailpit sigue local, sin proveedor externo elegido. [Límites](docs/MAIL_DELIVERY.md). |
 | Límites | Rate limiting en memoria por IP, espera entre correos y bloqueo temporal por fallos de login. |
-| Pruebas del frontend | 96/96 unitarias, tipos y build. Páginas públicas/reportes y recorrido integrado con cuenta/agente ficticios. Evidencia por corrida en el changelog; no es toda la suite histórica. |
+| Pruebas del frontend | 103 unitarias aprobadas. Se revisó toda la suite E2E con API/web/base temporales; las fixtures de IA siguen sin proveedor externo. Tipos y build de producción comprobados. [Resultados y repetición](docs/VERIFICATION.md). |
 | Dispositivos | Web `/devices`, correo verificado, código de un uso, credencial propia y revocación. Un dispositivo no revocado por cuenta. |
 | Agente Windows | Consola .NET 8 de uso manual: vinculación, credencial DPAPI CurrentUser, heartbeat, estado local y olvido de credencial. Sin instalador o servicio. |
 | Comprobaciones locales | Diez reglas de solo lectura con estados explícitos, evidencia seleccionada e informe JSON local al solicitar `scan`; `scan -Send` o `send` solicitan el envío manual. |
-| Pruebas del agente | 145/145 repetidas nuevamente en Windows el 2026-10-24 con `ReleaseClosureQa`. DPAPI real, consultas/HTTP controlados, lectura/envío y `410`; separadas de PostgreSQL. |
+| Pruebas del agente | 145/145 aprobadas nuevamente en la corrida consolidada del 2026-10-26. DPAPI real, consultas/HTTP controlados, lectura/envío y `410`; separadas de PostgreSQL. |
 | Reglas y hallazgos web | Ingesta con credencial Device, esquema 2, reintentos idempotentes y diez resultados por reporte. El servidor decide títulos, recomendaciones, severidad y pesos con su catálogo. |
 | Puntaje | Puntos confirmados deterministas, cobertura y cuatro conteos de estado. Desconocido no equivale a correcto ni a riesgo comprobado; sin resultados conocidos el puntaje es `null`. |
 | Control del historial | Desde Entender este análisis: exportación JSON del resultado y feedback, eliminación confirmada de análisis/evidencias/feedback y marca mínima por dispositivo/reporte. El mismo reporte eliminado recibe `410`; el agente pide un escaneo nuevo. |
 | Exportación de datos de cuenta | Desde Mi cuenta: perfil y todo el contenido propio del producto como JSON, incluidos equipos revocados, informes antiguos, feedback y marcas mínimas. Excluye secretos y registros internos de autenticación. |
 | Eliminación de cuenta | Contraseña actual y confirmación exacta; borra datos activos y accesos mediante cascadas. Las copias, correos/colas y archivos locales tienen custodia independiente. |
 | Mantenimiento técnico | Vista previa y purga manual confirmada de sesiones/tokens/códigos/credenciales antiguos. Lotes limitados y trabajo periódico desactivado por defecto; conserva contenido, marcas mínimas y hashes de sesiones activas. |
-| Backup local | Copia manual cifrada con contraseña, inventario de la misma instantánea y restauración comprobada en una base temporal que se retira. No sustituye la base activa ni programa copias. |
+| Backup local | Copia cifrada, inventario de la misma instantánea y restauración temporal. `rehearse` invalida accesos restaurados y comprueba conservación del contenido en esa copia retirada. No sustituye la base activa ni concilia borrados posteriores. [Uso](docs/RECOVERY_REHEARSAL.md). |
 | Actividad privada | Mi cuenta permite filtrar acción/días UTC y continuar hacia eventos anteriores, 50 por consulta, de catorce acciones completadas. Exportación completa sin filtros. Cuatro columnas mínimas, escritura atómica y cascada de cuenta, sin purga automática. No es auditoría externa inalterable ni monitoreo completo. |
 | Logs de API | JSON con plantilla de ruta, estado, duración e id de petición generado; sin URL libre, cuerpo, cabeceras, scopes, SQL o excepción. Lista cerrada de categorías. No crea archivos ni alertas. |
 | Detector de enlaces/mensajes | Revisión limitada por reglas `local-signals-v1`, con confirmación y 25 consultas/día UTC por defecto, combinadas por cuenta. Cuota persistente; sin guardar contenido/resultados o conectar con los destinos. |
@@ -80,7 +110,7 @@ con marca mínima para impedir que un reintento restaure un informe eliminado.
 | Primeros pasos | `/getting-started`: progreso propio, acceso privado al ZIP y guía de vinculación/scan/send. Paquete existente seleccionado en `.env.local`, sin recompilar el agente o publicar una release. [Uso](docs/GETTING_STARTED.md). |
 | Prioridades e historial | Resumen separa revisión y desconocidos del último informe, con enlaces a cada guía; tabla con equipo/cobertura y anteriores plegables por equipo. Conserva resultados y usa lecturas existentes. [Uso](docs/DASHBOARD_PRIORITIES.md). |
 | Información pública y errores | `/privacy` y `/terms` en borrador; `/report-problem` prepara un JSON local sin envío, datos automáticos o persistencia. Enlaces antes del registro y desde los layouts. [Estado](docs/PUBLIC_INFORMATION.md). |
-| IA externa | Pospuesta por elección del usuario; se mantienen guías y reglas locales. |
+| IA explicativa opcional | Por análisis, optativa y desactivada por defecto. Configuración habilitada por el usuario con clave de producto y `openrouter/openrouter/free`; ruta con proveedor explícito validada con datos ficticios, API reiniciada y habilitada para una prueba explícita desde la interfaz. Contexto de catálogo/estados/puntos/cobertura sin evidencia libre o identificadores personales; sin historial de resultados. Se comprobó inferencia real con diez estados ficticios, sin usar el informe personal. Guías locales siempre disponibles. [Alcance](docs/AI_EXPLANATIONS.md). |
 | Alertas, automatización y suscripciones | Pendientes, según el roadmap. |
 
 `SecurityAnalysis` incorpora una relación opcional a dispositivo para conservar
@@ -120,7 +150,7 @@ sus límites están en [CHANGELOG.md](CHANGELOG.md).
 
 ## Verificaciones realizadas
 
-El cierre local volvió a comprobar 251 pruebas habituales, 145 del agente y las
+El cierre integrado del 2026-10-24 comprobó 251 pruebas habituales, 145 del agente y las
 23 PostgreSQL separadas (16/4/3), con 96 unidades web y tipos/build. Se agregaron
 pruebas de documentos/reportes locales y un recorrido de registro, correo, ZIP,
 informes ficticios, comparación, exportaciones y borrados. [Alcance](docs/RELEASE_VALIDATION.md).
@@ -380,8 +410,10 @@ La [ingesta manual](docs/ANALYSIS_INGESTION.md) conecta esquema 2, fechas,
 reglas versionadas, puntos confirmados y cobertura con el historial del equipo.
 Los informes previos del esquema 1 requieren un `scan` nuevo para enviarse.
 Se incorporaron [guías locales y feedback privado](docs/LOCAL_GUIDES_AND_FEEDBACK.md)
-por análisis. El usuario eligió guías locales sin IA externa. Las explicaciones
-conservan los puntos y cobertura originales y no interpretan evidencia como instrucciones.
+por análisis. La decisión inicial fue usar guías sin IA externa; el 2026-10-25 el
+usuario autorizó añadir [explicación opcional con IA](docs/AI_EXPLANATIONS.md),
+desactivada por defecto; ruta explícita e inferencia sintética comprobadas el 2026-10-26. Las explicaciones conservan
+los puntos y cobertura originales y no interpretan evidencia como instrucciones.
 El agente actual `0.4.1-preview.1` conserva la distribución ZIP portátil win-x64 con runtime
 incluido, manifiesto SHA-256 y diagnóstico local sin acceder a credenciales.
 [Distribución y prueba privada](docs/AGENT_PRIVATE_BETA.md) detalla la ejecución
@@ -414,7 +446,8 @@ o marcas mínimas. Su trabajo periódico permanece desactivado; los hashes de re
 de sesiones activas se conservan completos para detectar reutilización.
 Se incorporó [backup cifrado y ensayo aislado de recuperación](docs/DATABASE_BACKUPS.md).
 El [inventario consolidado](docs/PENDING_FEATURES.md) distingue pendientes de
-producción, funciones por etapa y la IA externa pospuesta por elección del usuario.
+producción, funciones por etapa y configuración/validación externa pendientes
+de la explicación opcional de IA.
 Se incorporó [actividad privada de seguridad](docs/SECURITY_ACTIVITY.md) desde
 Mi cuenta, sin reconstrucción histórica. La consulta permite filtrar por acción
 y días UTC y continuar a eventos anteriores, sin escribir datos o cargar todo el
@@ -429,9 +462,15 @@ Se incorporaron [política inicial de contraseñas y capacidad de sesiones](docs
 El [cambio de correo](docs/ACCOUNT_EMAIL_CHANGE.md) exige confirmar ambas
 direcciones y la contraseña actual antes de cerrar todas las sesiones web.
 Cambio/reset de contraseña cancelan solicitudes pendientes y recuperación envía
-un aviso posterior sin secretos; la entrega sigue dependiendo de la cola volátil.
+un aviso sin secretos. El registro cifrado de correo ahora se confirma con la
+operación de cuenta y el worker recupera intentos tras reinicios. Su anillo de
+claves tiene custodia separada bajo DPAPI de la identidad Windows de la API;
+otro alojamiento requiere protección persistente acordada. No se eligió proveedor externo.
 El [procedimiento de recuperación](docs/RECOVERY_RUNBOOK.md) es una preparación:
 no hay restauración real ejecutada ni objetivos operativos acordados.
+El [ensayo de accesos restaurados](docs/RECOVERY_REHEARSAL.md) ya comprueba su
+invalidación transaccional y conservación del contenido en una temporal propia.
+No mantiene un destino recuperado ni reconstruye borrados posteriores a la copia.
 Siguen pendientes auditoría operativa, políticas de
 contenido, programación/copias externas y recuperación real con tratamiento de borrados.
 El orden y los criterios
@@ -458,3 +497,9 @@ local de la primera versión» guarda los bloques posteriores juntos por solicit
 del usuario: producto, controles de cuenta, herramientas operativas, pruebas y
 documentación. [CHANGELOG.md](CHANGELOG.md) registra las verificaciones de cada
 avance. Es un commit local; no supone push, release o despliegue.
+
+Después de ese corte, la cola cifrada persistente, su migración, diagnóstico
+operativo, pruebas y documentación del 2026-10-25 quedan en el árbol de trabajo,
+sin nuevo commit. El diagnóstico es local y de solo lectura; no agrega endpoint,
+almacenamiento de métricas, envíos o cambios en las reservas.
+La prueba en VM continúa pospuesta hasta que el usuario avise que está instalada.

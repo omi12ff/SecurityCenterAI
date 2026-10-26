@@ -43,9 +43,9 @@ export default async function GettingStartedPage() {
     { label: "Análisis recibido de este equipo", done: !!latest },
   ];
   return <DeviceShell user={user} activePage="getting-started"><SessionRenewal expiresAt={session.expiresAt.toISOString()} />
-    <div className="page-heading"><div><p className="page-greeting">DE TU CUENTA AL PRIMER RESULTADO</p><h1>Primeros pasos</h1><p className="page-description">Prepará el agente Windows y decidí cuándo enviar las comprobaciones de tu equipo.</p></div><RefreshButton label="Actualizar progreso" /></div>
+    <div className="page-heading"><div><h1>Primeros pasos</h1><p className="page-description">Prepará el agente Windows y decidí cuándo enviar las comprobaciones de tu equipo.</p></div><RefreshButton label="Actualizar progreso" /></div>
     <section className="section-card setup-panel setup-next" aria-labelledby="setup-next-title">
-      <p className="eyebrow">TU PRÓXIMO PASO</p><h2 id="setup-next-title">{next.title}</h2>
+      <h2 id="setup-next-title">{next.title}</h2>
       {device && <p>Equipo: <strong>{device.name}</strong>. {device.status === "linked" && !linked ? "Su acceso venció; generá un código nuevo para volver a vincularlo." : ""}</p>}
       <Link href={next.href} className="button button--primary">{next.action}</Link>
       <ol className="setup-progress" aria-label="Progreso de la preparación">{steps.map(step => <li key={step.label} className={step.done ? "setup-step-done" : undefined}><strong>{step.label}</strong><span>{step.done ? "Confirmado" : "Pendiente"}</span></li>)}</ol>

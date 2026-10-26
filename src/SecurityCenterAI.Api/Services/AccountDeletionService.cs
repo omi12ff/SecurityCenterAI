@@ -69,6 +69,7 @@ public sealed class AccountDeletionService(AppDbContext database, IPasswordHashe
         await database.UserSessions.Where(item => item.UserId == userId).LoadAsync(cancellationToken);
         await database.RefreshCredentials.Where(item => item.Session.UserId == userId).LoadAsync(cancellationToken);
         await database.AccountActionTokens.Where(item => item.UserId == userId).LoadAsync(cancellationToken);
+        await database.AccountEmailOutbox.Where(item => item.UserId == userId).LoadAsync(cancellationToken);
         await database.EmailChangeRequests.Where(item => item.UserId == userId).LoadAsync(cancellationToken);
         await database.LinkMessageUsage.Where(item => item.UserId == userId).LoadAsync(cancellationToken);
         await database.Devices.Where(item => item.UserId == userId).LoadAsync(cancellationToken);

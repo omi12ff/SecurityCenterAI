@@ -1,8 +1,8 @@
 # Recuperación operativa: procedimiento inicial
 
-Documento de preparación, 2026-10-24. **No se ejecutó una recuperación sobre la
-base activa.** El helper actual solo verifica copias en bases temporales que
-elimina. Este procedimiento no convierte esa comprobación en un restablecimiento
+Documento de preparación, actualizado 2026-10-25. **No se ejecutó una recuperación sobre la
+base activa.** El helper verifica copias y permite ensayar la invalidación de
+accesos en bases temporales que elimina. Este procedimiento no convierte ese ensayo en un restablecimiento
 del servicio ni establece plazos de conservación o disponibilidad.
 
 ## Decisiones que deben registrarse antes de operar con usuarios externos
@@ -14,7 +14,7 @@ del servicio ni establece plazos de conservación o disponibilidad.
 | Operador y reemplazo | Sin designar. Necesitan acceso separado al entorno, a las copias y a la contraseña. |
 | Custodia y copia externa | Pendientes. Un archivo en el mismo equipo no cubre pérdida/compromiso de ese equipo. |
 | Borrados posteriores a la copia | No existe registro externo durable para reconstruirlos. Impide prometer que una restauración antigua no reintroduzca datos borrados. |
-| Accesos restaurados | Deben invalidarse antes de reabrir: sesiones, refresh, tokens de cuenta, códigos y credenciales de agente. No está automatizado por el helper de backup. |
+| Accesos restaurados | Invalidación transaccional comprobable con `-Action rehearse`, exclusivamente en la copia temporal. Falta incorporarla a una recuperación real antes de reabrir. [Alcance](RECOVERY_REHEARSAL.md). |
 
 No se eligen valores de producción para RPO/RTO o conservación por inferencia.
 La evidencia de un ensayo debe indicar tiempos observados y límites, separados
@@ -46,6 +46,12 @@ de esos objetivos todavía pendientes.
    incorrecta o inventario distinto detiene el procedimiento. No borrar la copia
    o el volumen original para resolver el fallo.
 
+Para comprobar además la retirada de accesos sobre una copia compatible, usar
+`-Action rehearse` con el mismo `-File`. Verifica el inventario, invalida sesiones,
+enlaces, agentes, solicitudes de correo y cola, y comprueba conservación del
+contenido. La temporal se elimina: el resultado no es un destino listo para
+reabrir. [Uso, política de esquema y resultado](RECOVERY_REHEARSAL.md).
+
 ## Preparar la recuperación real fuera del servicio activo
 
 La herramienta actual **no ofrece una orden de restauración real**. Antes de
@@ -61,6 +67,10 @@ relaciones del inventario. Después, antes de habilitar tráfico o SMTP:
   navegador no invalida las copias de los tokens en otros equipos.
 - Consumir o retirar todos los tokens de verificación/recuperación restaurados.
   Los correos antiguos podrían seguir existiendo fuera de la base.
+- Retirar la cola `account_email_outbox` restaurada antes de iniciar el worker o
+  habilitar SMTP. Sus claves tienen custodia independiente y no están en el dump;
+  aunque puedan descifrarse, no corresponde reproducir enlaces/avisos anteriores
+  a la recuperación. El ensayo de backup no inicia el worker sobre la copia.
 - Invalidar códigos de vinculación y credenciales de agentes restaurados. Los
   clientes deberán vincularse de nuevo. Rotar solo la clave JWT no cierra ese
   acceso, que usa autorización independiente.
@@ -72,9 +82,11 @@ relaciones del inventario. Después, antes de habilitar tráfico o SMTP:
   Si no se pueden reconstruir, registrar la limitación y mantener ese contenido
   fuera de exposición hasta resolver el tratamiento.
 
-Estas transformaciones requieren un helper propio con transacción, destino
-acotado y pruebas de rollback/aislamiento. No se incluyen sentencias de reemplazo
-de la base activa ni se ejecutan sobre los datos del usuario en esta entrega.
+La retirada de accesos y conservación de contenido ya tienen helper transaccional
+y pruebas de rollback/aislamiento para el ensayo temporal. La recuperación real
+todavía requiere su destino, conciliación de borrados y controles operativos.
+No se incluyen sentencias de reemplazo de la base activa ni se ejecutan sobre
+los datos del usuario en esta entrega.
 
 ## Ensayo y reapertura
 

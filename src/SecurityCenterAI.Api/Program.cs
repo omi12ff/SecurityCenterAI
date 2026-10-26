@@ -1,6 +1,5 @@
 using System.Text;
 using System.Threading.RateLimiting;
-using System.Threading.Channels;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
@@ -13,10 +12,17 @@ using Microsoft.OpenApi.Models;
 using SecurityCenterAI.Api.Configuration;
 using SecurityCenterAI.Api.Services;
 using SecurityCenterAI.Api.Services.Backups;
+using SecurityCenterAI.Api.Services.Ai;
 using SecurityCenterAI.Api.Services.Operations;
 using SecurityCenterAI.Domain.Entities;
 using SecurityCenterAI.Infrastructure;
 using SecurityCenterAI.Infrastructure.Persistence;
+
+if (args.Any(arg => arg.StartsWith("--email-queue-", StringComparison.OrdinalIgnoreCase)))
+{
+    Environment.ExitCode = await EmailQueueStatusCommand.RunAsync(args);
+    return;
+}
 
 if (args.Any(arg => arg.StartsWith("--backup-", StringComparison.OrdinalIgnoreCase)))
 {
@@ -31,6 +37,10 @@ if (args.Any(arg => arg.StartsWith("--retention-", StringComparison.OrdinalIgnor
 }
 
 var builder = WebApplication.CreateBuilder(args);
+// Optional per-user gateway configuration stays outside the repository and OneDrive.
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Configuration.AddJsonFile(Path.Combine(AiExplanationOptions.LocalDirectory, "settings.json"), optional: true, reloadOnChange: false)
+        .AddEnvironmentVariables();
 SafeOperationalLogging.Configure(builder.Logging, builder.Services);
 builder.Services.AddHealthChecks().AddCheck<PostgresReadinessCheck>("postgresql",
     tags: ["ready"], timeout: TimeSpan.FromSeconds(3));
@@ -69,15 +79,23 @@ builder.Services.AddOptions<DeviceSecurityOptions>()
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddSingleton(Channel.CreateBounded<PendingAccountEmail>(new BoundedChannelOptions(100)
-{ SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait }));
+AccountEmailProtection.Configure(builder.Services, builder.Environment);
 builder.Services.AddSingleton<IAccountEmailTransport, SmtpAccountEmailSender>();
-builder.Services.AddSingleton<IAccountEmailSender, QueuedAccountEmailSender>();
-builder.Services.AddHostedService<AccountEmailWorker>();
+builder.Services.AddScoped<IAccountEmailSender, QueuedAccountEmailSender>();
+builder.Services.AddScoped<AccountEmailDispatcher>();
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<AccountEmailWorker>();
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<AnalysisIngestionService>();
 builder.Services.AddScoped<AnalysisGuidanceService>();
+builder.Services.Configure<AiExplanationOptions>(builder.Configuration.GetSection(AiExplanationOptions.SectionName));
+builder.Services.AddSingleton<AiExplanationCredential>();
+builder.Services.AddSingleton<AiExplanationQuota>();
+builder.Services.AddScoped<AnalysisAiExplanationService>();
+builder.Services.AddHttpClient<IAiExplanationProvider, OmniRouteExplanationProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false,
+        AutomaticDecompression = System.Net.DecompressionMethods.None })
+    .RedactLoggedHeaders(_ => true);
 builder.Services.AddScoped<AnalysisComparisonService>();
 builder.Services.AddScoped<AnalysisHistoryService>();
 builder.Services.AddScoped<AccountExportService>();
@@ -217,6 +235,12 @@ var app = builder.Build();
 
 app.UseMiddleware<OperationalRequestMiddleware>();
 app.UseRouting();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Value?.EndsWith("/ai-explanation", StringComparison.OrdinalIgnoreCase) == true)
+        context.Response.OnStarting(() => { context.Response.Headers.CacheControl = "no-store"; return Task.CompletedTask; });
+    await next(context);
+});
 
 if (app.Environment.IsDevelopment())
 {

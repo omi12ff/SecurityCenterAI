@@ -19,13 +19,13 @@ function apiUrl(path: string): URL {
   return new URL(path.replace(/^\//, ""), base);
 }
 
-export async function request(path: string, options: { body?: unknown; token?: string; method?: "GET" | "POST" | "DELETE" } = {}): Promise<unknown> {
+export async function request(path: string, options: { body?: unknown; token?: string; method?: "GET" | "POST" | "DELETE"; timeoutMs?: number } = {}): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(apiUrl(path), {
       method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 12_000),
       headers: {
         Accept: "application/json",
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),

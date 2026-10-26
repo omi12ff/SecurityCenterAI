@@ -1,6 +1,6 @@
 # Arquitectura de Security Center AI
 
-Estado documentado: **2026-10-22**. La guía maestra v1.0 del 27 de julio de
+Estado documentado: **2026-10-26**. La guía maestra v1.0 del 27 de julio de
 2026 define el objetivo del producto. Esta arquitectura distingue el código
 actual de las funciones futuras; las pruebas realizadas están en
 [CHANGELOG.md](CHANGELOG.md).
@@ -12,7 +12,12 @@ La API utiliza ASP.NET Core .NET 8, EF Core y Npgsql. PostgreSQL 16 almacena
 cuentas, sesiones, dispositivos y la base de resultados. Mailpit captura correo de desarrollo.
 La consola Windows .NET 8 añade vinculación, heartbeat y diez comprobaciones
 locales y envío manual. La API valida el reporte y calcula puntos confirmados
-y cobertura con un catálogo versionado propio. Todavía no hay IA.
+y cobertura con un catálogo versionado propio. La explicación opcional de IA
+usa un adaptador de servidor a OmniRoute, desactivado por defecto. El usuario
+habilitó la configuración local con clave de producto y modelo `openrouter/free`;
+la API ya se reinició con el alias corregido y quedó habilitada para una prueba
+explícita desde la interfaz. El catálogo autorizado contiene
+ese único modelo, sin inferencia externa comprobada; la guía local sigue disponible.
 
 ```mermaid
 flowchart LR
@@ -136,11 +141,12 @@ explícitos, usuario, contraseña, TLS y `FrontendUrl` HTTPS. No se ha elegido
 un proveedor de producción. Mailpit contiene enlaces sensibles de prueba,
 admite hasta 200 mensajes y no tiene volumen persistente en Compose.
 
-La API encola el correo en memoria, con capacidad de 100 mensajes, y un worker
-lo envía fuera de la solicitud HTTP. Los fallos generan una advertencia genérica
-sin destinatario, token ni excepción. La cola no es durable y no hay reintentos
-persistidos: un reinicio o fallo SMTP puede perder la entrega. La respuesta
-genérica de recuperación no confirma que el correo ya haya sido entregado.
+La API prepara un registro cifrado de correo en el mismo DbContext/transacción
+que la operación. Un worker reserva filas y las envía fuera de la solicitud HTTP.
+La cola e intentos sobreviven al reinicio; no se guardan destinatarios o tokens en
+claro. Claves persistentes bajo DPAPI de la identidad Windows de la API, fuera del
+repositorio. La respuesta genérica de recuperación no confirma entrega SMTP.
+[Diseño y límites](docs/MAIL_DELIVERY.md).
 
 ## Dispositivos y autorización separada
 
@@ -326,7 +332,8 @@ Los conteos y resultados de cada bloque constan en [CHANGELOG.md](CHANGELOG.md).
 
 ## Arquitectura objetivo de la guía
 
-Quedan la distribución y operación del agente y las explicaciones de IA. El
+Quedan ampliar distribución y operación del agente y validar inferencia real
+para la explicación opcional de IA ya configurada por el usuario. El
 recorrido manual de diez reglas ya conecta consola, API y web mediante un
 cálculo determinista limitado. No equivale a una revisión completa de Windows.
 
@@ -336,7 +343,7 @@ flowchart LR
     Agent["Agente Windows · consola manual existente"] -->|"Ingesta explícita existente"| Backend
     Backend --> Rules["Catálogo y puntos confirmados · 10 reglas"]
     Backend --> Database["PostgreSQL · historial existente"]
-    Backend --> Ai["IA explicativa · pendiente"]
+    Backend -->|"Solo solicitud confirmada y contexto reducido"| Ai["OmniRoute · explicación opcional por consulta"]
 ```
 
 El recorrido previsto es vincular el agente con un código temporal, entregar
@@ -349,7 +356,8 @@ fuera del alcance aprobado.
 La sesión de cuenta no sustituye la credencial de dispositivo. Las recomendaciones
 ejecutables y la auditoría completa siguen pendientes; las diez reglas y la
 consulta de instantáneas no implementan esos procesos.
-No se integró un proveedor de IA; colas y hosting de producción siguen pendientes.
+No se comprobó inferencia externa de IA; correo externo
+y hosting de producción siguen pendientes.
 La conservación de contenido, operación de copias y producción siguen pendientes.
 Existe backup manual cifrado con ensayo aislado, descrito abajo.
 Existe mantenimiento técnico opcional de autenticación, descrito abajo.
@@ -365,6 +373,34 @@ El índice único y los reintentos protegen primeros envíos concurrentes; las
 ediciones posteriores reemplazan la valoración. El acceso usa sesión Bearer y
 mantiene el historial de dispositivos revocados.
 [Contrato y límites](docs/LOCAL_GUIDES_AND_FEEDBACK.md).
+
+## Explicación opcional de IA por análisis
+
+El backend expone consulta de disponibilidad y solicitud confirmada en
+`/api/devices/{deviceId}/analyses/{analysisId}/ai-explanation`, con Bearer,
+sesión activa, correo verificado y autorización conjunta de propietario/equipo/análisis.
+El navegador no elige modelo, destino o instrucciones. El servicio construye el
+contexto con puntos/cobertura y las diez reglas: identificador, versión y estado,
+con títulos, descripciones y límites del catálogo local. Excluye evidencia libre,
+identificadores de cuenta/equipo/informe, nombres, correo, fechas, feedback y archivos.
+
+La conexión OpenAI-compatible permanece en la API; la clave del producto se
+separa de la de desarrollo. Se comprueba un JSON de esquema cerrado con las diez
+reglas únicas antes de presentar texto escapado por React. Acciones manuales y
+referencias provienen de la guía local. No modifica resultados o ejecuta acciones.
+Fallo, cuota o respuesta incompatible conservan la guía local como alternativa.
+
+No agrega tablas, migraciones, historial de conversaciones ni persistencia de
+resultados de IA. La web conserva el resultado solo en memoria de la página.
+La cuota inicial de cinco intentos diarios UTC por propietario y concurrencia
+de cuatro globales/uno por propietario viven en memoria de una sola API; reiniciar
+los restablece y no coordinan varias instancias. La configuración local es optativa,
+con custodia Windows DPAPI CurrentUser fuera del repositorio.
+[Contrato, configuración y límites](docs/AI_EXPLANATIONS.md).
+
+La visión posterior incluye escritorio con bandeja y vigilancia opcional. Antes
+de automatizar análisis o acciones habrá que definir alcance, plan, autorizaciones
+y controles por operación. La consola actual y este módulo no implementan esa autonomía.
 
 ## Distribución portátil del agente
 
@@ -504,6 +540,18 @@ compara el inventario y retira esa base en `finally`. Una verificación posterio
 puede funcionar aunque no exista la base original. No hay parámetro de destino
 activo. [Formato, comandos, pruebas y alcance](docs/DATABASE_BACKUPS.md).
 
+`--backup-rehearse` reutiliza autenticación, restauración y comparación antes de
+llamar a `RestoredAccessReset` exclusivamente en ese destino propio. Exige host,
+puerto y nombre temporal exactos, las 17 tablas revisadas, columnas/tipos/nulabilidad
+del modelo y última migración admitida. En una transacción serializable, bloquea
+solo las tablas temporales, vuelve a comprobar el inventario y retira siete
+almacenes de accesos, solicitudes/cola de correo incluidas. Renueva versiones de
+usuario/dispositivo y revoca equipos. Compara ocho tablas completas y proyecciones
+de perfil/dispositivo que excluyen solo las columnas modificadas intencionadamente.
+Las diferencias revierten; el `finally` retira la base. Reporta cantidades y
+comprobaciones, sin filas o secretos. No arranca host/worker, no requiere claves
+DPAPI de correo y no sustituye ni reconcilia la base activa. [Contrato y límites](docs/RECOVERY_REHEARSAL.md).
+
 ## Revisión de enlaces/mensajes para 1.0
 
 `LocalScamRules` valida entradas acotadas y aplica reglas locales versionadas;
@@ -622,9 +670,8 @@ de recuperación pendientes; guarda `PasswordChanged` en el mismo commit. No
 modifica credenciales del agente o verificación. Conflictos tienen reintentos acotados.
 
 POST Bearer de hasta 2 KiB con confirmación y política `AccountPassword` de cinco
-solicitudes/minuto/IP. El aviso de correo es posterior al commit y no lleva token,
-contraseña o enlace; cola de memoria y fallo de mejor esfuerzo. Su único log nuevo
-es un mensaje fijo de fallo de encolado en una categoría revisada.
+solicitudes/minuto/IP. El aviso no lleva token, contraseña o enlace. Su registro
+cifrado se confirma junto con el cambio; SMTP se intenta después, con logs mínimos.
 
 Mi cuenta presenta formulario con repetición y confirmación. El servidor de Next
 no devuelve secretos al estado de error; tras 204 borra cookies y redirige al login.
@@ -642,8 +689,9 @@ perfil. Las mutaciones bloquean el usuario y coordinan versiones con sesiones,
 contraseña y borrado. Finalizar confirma correo, revocación web, consumo de enlaces,
 borrado de solicitud y evento mínimo juntos. Los agentes conservan su acceso.
 Reset y cambio de contraseña invalidan la solicitud; recuperación añade aviso
-posterior de mejor esfuerzo. Exportación agrega metadatos sin hashes y el
-mantenimiento técnico agrega la categoría `emailChanges`. No hay outbox durable.
+cifrado confirmado con la operación. Exportación agrega metadatos sin hashes y el
+mantenimiento técnico agrega la categoría `emailChanges`. La cola cifrada durable
+revalida solicitudes y enlaces antes de entregar, sin persistir texto SMTP legible.
 
 ## Edición del nombre del perfil
 
@@ -722,9 +770,20 @@ configurable. Cambia la versión del usuario al confirmar la nueva sesión y
 reintenta si otro login gana esa versión. El inventario devuelve el máximo para
 la interfaz. Refresh conserva la sesión y no vuelve a crearla por este límite.
 
-La cola contiene `PendingAccountEmail` con fecha de entrada y material de envío
-en memoria. `IAccountEmailTransport` separa SMTP del emisor de cola y permite
-simular fallos. El worker usa intentos/esperas acotados, descarte por antigüedad y
-cancelación; no persiste destinatarios o tokens nuevos en PostgreSQL. Los logs
-solo agregan el código de reintento y número de intento. El diagnóstico local
-NOOP vive en PowerShell, fuera del readiness HTTP de PostgreSQL.
+`IAccountEmailSender.QueueAsync` prepara `AccountEmailOutbox` para el commit de
+la operación. `AccountEmailProtection` cifra y liga el payload a usuario/fila con
+Data Protection. La tabla agrega metadatos de entrega, reservas y concurrencia.
+`AccountEmailDispatcher` reclama con `FOR UPDATE SKIP LOCKED`, confirma la reserva
+y llama a `IAccountEmailTransport` sin mantener la transacción durante SMTP.
+Intentos y próximo envío sobreviven al reinicio; cada estado terminal elimina la
+fila. Validación de usuario/tokens evita enviar material ya inválido. Las claves
+persisten fuera del repositorio bajo DPAPI; Testing usa claves efímeras explícitas.
+El diagnóstico local NOOP permanece fuera del readiness HTTP de PostgreSQL.
+
+`EmailQueueStatusCommand` sale antes de construir el host web. Registra un lector
+local sin DbContext, worker, SMTP o Data Protection. `EmailQueueStatusReader`
+ejecuta una consulta agregada en READ ONLY: partición de estados, fechas y conteo
+de pendientes con intentos previos. No selecciona payloads o identidades.
+Los scripts `status.ps1` y `email-queue-status.ps1` presentan salida humana/JSON;
+umbrales solo diagnósticos y salidas 0/3/1. No hay endpoint, tabla o migración nueva.
+[Protocolo y límites](docs/EMAIL_QUEUE_DIAGNOSTICS.md).

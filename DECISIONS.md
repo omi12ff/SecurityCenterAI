@@ -860,6 +860,117 @@ atribuyen a esta fecha el origen de todo el código existente.
 - **Referencias:** [información y controles](docs/PUBLIC_INFORMATION.md),
   [recorrido integrado](docs/RELEASE_VALIDATION.md).
 
+## ADR-0038 — Cola de correo cifrada y atómica con la cuenta
+
+- **Fecha:** 2026-10-25.
+- **Estado:** implementado localmente; SMTP externo y protección para otro alojamiento pendientes.
+- **Antecedente:** reemplaza la persistencia volátil de ADR-0030; conserva sus
+  reintentos acotados y la separación de transporte. El usuario continúa el
+  software disponible y avisará cuando tenga la VM para compatibilidad.
+- **Decisión:** preparar el correo cifrado dentro del mismo DbContext/commit que
+  la operación. Tabla con FK/cascada al propietario, vigencia, intentos, reserva
+  y versión; reclamar con `FOR UPDATE SKIP LOCKED` y confirmar antes de SMTP.
+- **Claves y privacidad:** Data Protection ligado a usuario/fila, anillo separado
+  bajo DPAPI CurrentUser en LocalAppData, permisos restringidos y sin uniones.
+  No reutilizar JWT, guardar tokens legibles o usar claves efímeras de forma
+  silenciosa fuera de Testing. La protección persistente actual requiere Windows;
+  otro alojamiento necesita una decisión de custodia/proveedor de claves.
+- **Consecuencias:** guardar la cola falla junto con la operación; SMTP posterior
+  no revierte el commit. Revalidar enlaces y retirar estados terminales. Puede
+  haber duplicados si SMTP acepta y se pierde la confirmación; no se conserva
+  historial de entrega. Borrar cuenta elimina pendientes. Backup lleva ciphertext,
+  sin claves; recuperación real debe retirar cola/tokens antiguos antes de SMTP.
+- **Referencia:** [contrato y límites](docs/MAIL_DELIVERY.md).
+
+## ADR-0039 — Diagnóstico local de cola mediante agregados de solo lectura
+
+- **Fecha:** 2026-10-25.
+- **Estado:** implementado localmente.
+- **Contexto:** la cola durable necesita mostrar acumulación y próximos intentos
+  sin consultar mensajes privados ni depender de la VM o de un proveedor externo.
+- **Decisión:** CLI antes del host web y consulta agregada en READ ONLY. Estados
+  excluyentes, edad, fechas y contadores; sin seleccionar payloads/identidades.
+  Integrar el helper JSON al diagnóstico HTTP/SMTP local existente.
+- **Motivo:** observar el estado persistido sin provocar envíos, recuperar reservas
+  o ampliar la superficie HTTP. Los umbrales avisan; no modifican la cola.
+- **Consecuencias:** acceso administrativo local y configuración de intentos
+  coherente con el worker. Salida 3 para atención y 1 para consulta/dependencia
+  no disponible. Snapshot no equivale a worker vivo o entrega comprobada; alertas
+  externas, métricas durables y capacidad conservan su alcance pendiente.
+- **Referencia:** [uso, estados y protocolo](docs/EMAIL_QUEUE_DIAGNOSTICS.md).
+
+## ADR-0040 — Ensayar la invalidación de accesos solo en restauraciones temporales
+
+- **Fecha:** 2026-10-25.
+- **Estado:** Adoptado para ensayo local; no habilita recuperación del servicio.
+- **Contexto:** verificar un dump conserva también accesos y mensajes antiguos.
+  El procedimiento operativo exige retirarlos antes de reabrir. Otra PC/VM,
+  responsable y decisiones de publicación siguen pendientes.
+- **Decisión:** añadir `backup.ps1 -Action rehearse` sobre el destino temporal
+  generado por el verificador. Primero autenticar/restaurar/comparar; después
+  aplicar una transacción con política cerrada de tablas, columnas y migración.
+  Retirar accesos/solicitudes/cola, renovar versiones, revocar equipos y comprobar
+  contenido mediante huellas antes de confirmar. Retirar siempre la temporal.
+- **Motivo:** comprobar el requisito de seguridad sin sustituir el servicio,
+  descifrar correos ni aceptar un destino manual que pueda apuntar a datos activos.
+- **Consecuencias:** esquema futuro requiere revisión explícita; `verify` conserva
+  su alcance anterior. Informe con cantidades y banderas de que no se reemplazó
+  la base activa ni se conciliaron borrados. Contraseñas/contenido se conservan;
+  RPO/RTO, secretos, copia externa, borrados posteriores y reapertura real siguen
+  fuera del ensayo. No es un sandbox de SQL de un origen desconocido.
+- **Referencia:** [uso, comprobaciones y límites](docs/RECOVERY_REHEARSAL.md).
+
+## ADR-0041 — Explicación opcional por análisis con contexto de catálogo reducido
+
+- **Fecha:** 2026-10-25.
+- **Estado:** autorizada e incorporada localmente, desactivada por defecto;
+  proveedor y prueba de inferencia externa pendientes.
+- **Antecedente:** amplía la decisión inicial de usar guías sin IA externa. Las
+  guías locales y reglas deterministas se conservan. El apoyo MCP de desarrollo
+  tiene credencial y configuración independientes del producto.
+- **Contexto:** el usuario autorizó explicar cada análisis con IA y mantuvo como
+  visión futura el escritorio con vigilancia/autonomía; no pidió un chatbot ni
+  habilitar acciones automáticas en este bloque.
+- **Decisión:** consulta explícita por análisis propio, con sesión Bearer activa,
+  correo verificado y confirmación por envío. La API prepara solo puntos/cobertura,
+  diez identificadores/versiones/estados y títulos/descripciones/límites locales.
+  Excluye evidencia libre, datos personales, identificadores de cuenta/equipo/informe,
+  fechas, feedback y archivos. Modelo/destino pertenecen al servidor; clave de
+  producto separada de desarrollo, protegida mediante DPAPI CurrentUser fuera del repo.
+- **Respuesta:** validar un JSON cerrado con diez reglas únicas y texto acotado;
+  presentar texto escapado con acciones/referencias de las guías locales. No cambia
+  hallazgos, puntos/cobertura o Windows. Fallo, cuota y respuesta incompatible
+  conservan la alternativa local. No persiste resultados o conversaciones.
+- **Límites:** cinco intentos/propietario/día UTC por defecto y concurrencia
+  4 global/1 por propietario, en memoria de una sola API. Reiniciar restablece
+  límites; no resuelve capacidad/abuso de producción con varias instancias.
+  Bloque inicial limitado a alias OpenRouter gratuitos y permisos acotados en
+  OmniRoute; ninguna inferencia real o proveedor quedan habilitados por este cambio.
+- **Motivo y consecuencias:** permite revisar la explicación como ayuda opcional
+  sin enviar evidencia libre ni introducir una fuente nueva del puntaje. Un
+  esquema válido no prueba veracidad; proveedor, conservación, disponibilidad y
+  condiciones deben revisarse antes de activar. Escritorio/vigilancia/autonomía
+  requieren alcance, plan y aprobaciones propios y siguen pendientes; otra PC/VM,
+  publicación y datos de políticas mantienen sus pendientes.
+- **Referencia:** [uso, configuración y límites](docs/AI_EXPLANATIONS.md).
+
+## ADR-0042 — Solicitud de IA con botón y proveedor explícito
+
+- **Fecha:** 2026-10-26.
+- **Estado:** incorporada por petición expresa del usuario; actualiza la interacción
+  de ADR-0041 sin cambiar sus límites de datos, autorización o conservación.
+- **Decisión:** retirar la casilla. El aviso permanece junto al botón y cada clic
+  solicita una consulta. Abrir o recargar la página no llama a la IA. La acción
+  web exige el submit explícito y la API conserva su flag de solicitud verdadero.
+- **Corrección:** la prueba real rechazó `openrouter/free` por ambigüedad. Fijar
+  `openrouter/openrouter/free` tanto en la app como en la allowlist de su clave;
+  no ampliar conexiones, permisos administrativos o modelos pagos.
+- **Resultado y fallos:** presentar resumen y diez explicaciones con estados
+  originales. Un rechazo, cuota, timeout o contenido incompatible debe mostrar
+  una razón segura y distinguir la guía local de un resultado generado.
+- **Validación:** respuesta real sintética con diez comprobaciones, sin informe
+  personal; pruebas de permisos, formato, clic único, estados y errores.
+
 ## Cómo continuar este registro
 
 Para una decisión nueva, añadir un ADR con identificador, fecha, estado, contexto,

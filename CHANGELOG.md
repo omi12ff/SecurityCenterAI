@@ -11,6 +11,285 @@ implementación; este corte los guarda juntos por solicitud del usuario.
 No hay push, tag, release pública o despliegue. Las políticas finales,
 operación externa y compatibilidad ampliada mantienen sus pendientes.
 
+## Sin publicar — diagnóstico de IA y respuesta de botones, 2026-10-26
+
+- Revisión solicitada tras un aviso de indisponibilidad de IA. Web, API,
+  PostgreSQL y gateway disponibles; consulta real con datos ficticios válida,
+  con diez comprobaciones y resumen de 218 caracteres. No se reprodujo el fallo
+  anterior ni se cambió a un modelo pago o se relajaron validaciones.
+- El adaptador registra categorías fijas y el código HTTP ante rechazos del
+  gateway, además de fallos de conexión y timeout. Sin leer cuerpos de error ni
+  registrar excepciones, credenciales, prompts o informes. Pruebas de redacción
+  cubren 404, 502, permisos, cuotas y errores de transporte.
+- Botones con cambios de superficie en 180ms y presión en 120ms, sin desplazar
+  el layout ni retrasar solicitudes. Foco inmediato, controles deshabilitados
+  estáticos y movimiento reducido sin transformaciones. CSS compartido y
+  tokens; sin dependencias nuevas. Pruebas de interacción y capturas con datos
+  ficticios en `artifacts/buttons-review/`.
+- Verificación: 392 pruebas backend, 145 del agente, 103 unitarias web y las
+  40 pruebas PostgreSQL en bases aisladas correctas. Los 95 casos E2E distintos
+  quedaron aprobados entre el perfil normal y el de paquete ausente; se corrigió
+  el reset de estado compartido de las nuevas pruebas de botones y se repitieron
+  las cuatro. npm de producción y NuGet con transitivas no reportaron
+  vulnerabilidades. API local actualizada y servicios con HTTP 200. Informe y
+  capturas locales en `artifacts/buttons-review/review.md`.
+
+## Sin publicar — sistema visual y herramientas UX/UI, 2026-10-26
+
+- Se instalaron Impeccable y UI/UX Pro Max, los plugins opcionales Product Design
+  y Figma, y Python para las búsquedas locales de patrones. Herramientas de
+  desarrollo; no se agregaron dependencias de ejecución a la app.
+- Base visual compartida: tipografía más legible, espacios, formularios,
+  botones, foco y colores de estado. Azul para desconocido y ámbar para revisar,
+  con etiquetas conservadas. Se retira el anillo decorativo del puntaje.
+- Guías con resumen primero y comprobaciones desplegables; las de revisión se
+  abren inicialmente. Los enlaces desde prioridades/IA revelan su evidencia.
+  Navegación móvil mantiene visible la sección actual. La IA conserva el aviso
+  de datos y «Pensando»; proveedor/modelo pasan a un detalle secundario.
+- Dirección documentada en `DESIGN.md`, valores en `design-tokens.json` y
+  referencia autónoma en `design-preview.html`. Capturas con datos ficticios y
+  pruebas en base aislada. No se creó un archivo remoto en Figma ni se enviaron
+  capturas de la cuenta personal a servicios de diseño.
+- Validación: compilación y TypeScript, 103 unitarias web y 91 casos E2E
+  distintos entre el perfil normal y el de paquete ausente. Dos localizadores
+  de feedback se acotaron a su región y pasaron al repetirlos. Capturas en tres
+  tamaños, nueve contrastes de paleta, teclado, movimiento reducido, colores
+  forzados y viewport equivalente a zoom 200%; sin errores JavaScript en el
+  recorrido visual. Evidencia local en `artifacts/design-review/`.
+
+## Sin publicar — espera «Pensando» y formato de IA, 2026-10-26
+
+- A pedido del usuario, el botón deja paso a la palabra «Pensando» con animación
+  suave, sin iconos o puntos. Anuncio accesible, movimiento reducido y colores
+  forzados contemplados. El error anterior se oculta durante el reintento.
+- El proveedor solicita un esquema JSON estricto con campos, cantidad y reglas
+  del catálogo; exige parámetros compatibles y mantiene la validación posterior.
+  Salida acotada a 4500 tokens y texto solicitado más breve, sin herramientas,
+  cambios de modelo/conexión o fallback de pago. Rechazos registrados únicamente
+  como categorías fijas, sin texto del modelo, claves o identificadores.
+- La instalación local conserva su clave/modelo/límite diario y amplía el tiempo
+  máximo a 60 segundos. Prueba real con diez estados ficticios: `generated`,
+  diez reglas válidas y resumen de 426 caracteres. También se observaron fallos
+  transitorios; no demuestra disponibilidad continua del proveedor gratuito.
+- 390 pruebas API aprobadas (40 PostgreSQL omitidas), incluidas 118 de IA;
+  15 E2E de IA aprobadas, con tipos y build web.
+  Sin consulta del informe personal ni rediseño de otras pantallas.
+
+## Sin publicar — revisión completa y aislamiento E2E, 2026-10-26
+
+- La verificación de navegador dispone de base PostgreSQL, API, web y JWT
+  temporales propios. `verify.ps1 -IncludeE2E` y `test:e2e:isolated` lo utilizan;
+  puertos loopback y limpieza acotada, sin modificar los servicios habituales.
+  Se comprobaron compilación, selección de pruebas y limpieza ante un fallo.
+- Corregidos selectores de pruebas que coincidían con varios formularios o el
+  anunciador de Next.js, y expectativas antiguas de los campos de exportación.
+  Las pruebas conservan controles de propiedad, secretos y datos completos.
+- Parcheadas dos transitivas antiguas en ambos proyectos de pruebas:
+  `System.Net.Http` 4.3.4 y `System.Text.RegularExpressions` 4.3.1, privadas para
+  esos proyectos. Auditorías NuGet de los seis proyectos y npm sin alertas
+  conocidas. No es una auditoría del runtime o del sistema operativo.
+- Aprobadas 389 API, 145 agente y 103 unitarias web; las 40 PostgreSQL omitidas
+  en la suite habitual aprobaron en sus cuatro bases temporales. Tipos y build
+  comprobados. Los 89 escenarios E2E tienen evidencia entre corrida general y
+  repeticiones focalizadas; no fue una única corrida verde. [Detalle](docs/VERIFICATION.md).
+- Datos principales conservados según huellas antes/después; sin usuarios E2E
+  residuales en la base personal. Sin migración personal, commit o publicación.
+- Tres [propuestas de diseño](docs/DESIGN_PROPOSALS.md) investigadas y pendientes
+  de revisión con el usuario. No se aplicó rediseño ni se instalaron bibliotecas
+  visuales. Registrado el próximo fin de soporte de .NET 8 y la actualización
+  pendiente de runtime/ZIP, junto con los demás [bloqueos](docs/LOCAL_REVIEW_2026_10_26.md).
+
+## Sin publicar — reparación de la consulta real de IA, 2026-10-26
+
+- Reproducido HTTP 400 real: `openrouter/free` es ambiguo en OmniRoute. Ruta y
+  allowlist de la clave de producto fijadas a `openrouter/openrouter/free`,
+  conservando conexión única, `noLog`, compresión desactivada y ausencia de
+  permisos administrativos. La configuración rechaza el nombre corto ambiguo.
+- El usuario pidió retirar la casilla: cada consulta se solicita directamente
+  con el botón, junto al aviso de datos. La acción valida el submit explícito;
+  la API mantiene su flag de solicitud, autenticación, propiedad y límites.
+- La pantalla distingue fallo y guía local, con categorías seguras para
+  credencial, modelo/permisos, presupuesto, cuota, conexión, timeout o formato.
+  No devuelve cuerpos ni mensajes internos del proveedor. Carga, reintento y
+  resultado siguen disponibles sin conversación o ejecución de acciones.
+- **117 pruebas IA, 102 unitarias web y 14 E2E aisladas aprobadas**, junto con
+  tipos/build y compilación API sin advertencias. Helper: ocho validaciones
+  aisladas. Prueba real del adaptador .NET con catálogo/estados ficticios:
+  `generated`, resumen de 524 caracteres y diez reglas válidas. No se utilizó
+  un informe personal; el proveedor puede dar resultados diferentes después.
+- API reiniciada con la corrección. Sin migraciones, cambios de `.env`, commit
+  o publicación. ADR-0042 y guía de pantalla/configuración actualizados.
+
+## Sin publicar — activación local y alias de OpenRouter, 2026-10-26
+
+- Conexión OpenRouter y clave de producto configuradas por el usuario desde el
+  panel privado. Clave guardada mediante el helper con entrada oculta y DPAPI;
+  catálogo consultado con esa credencial: un único modelo, `openrouter/free`.
+  No se enviaron informes ni se ejecutó una completion para esta comprobación.
+- Corregido el alias supuesto `or/`: la instalación 3.8.52 registra `openrouter`.
+  La aplicación usa ahora el identificador exacto del catálogo autorizado.
+  C# y helper aceptan ese router, la selección explícita
+  `openrouter/openrouter/free` y variantes `openrouter/proveedor/modelo:free`;
+  rechazan el alias anterior, pago, rutas auto y entradas con controles.
+- **110 pruebas IA aprobadas** (77 proveedor y 33 servicio) y 16 fixtures del
+  helper tras el ajuste; compilación API sin errores ni advertencias. Se conserva
+  la corrida consolidada anterior; no se repitieron suites ajenas al cambio.
+- API reiniciada, readiness y web 200. Configuración del producto habilitada con
+  cinco intentos por cuenta/día UTC y plazo de 30 segundos. La inferencia real y
+  el recorrido con un informe propio quedan pendientes del botón y confirmación
+  de envío de la app; el catálogo no acredita la respuesta de un modelo.
+- MCP de apoyo: normalización actualizada fuera del repositorio; 15 comprobaciones
+  aisladas y smoke de protocolo aprobados. Continúa desactivado y con su clave y
+  permisos separados. Sin cambios de esquema, `.env`, commit o publicación.
+
+## Sin publicar — explicación opcional con IA, 2026-10-26
+
+- Ampliación fija por análisis desde «Entender este análisis», con confirmación
+  por intento, carga, alternativa local y nuevo consentimiento para reintentar.
+  Resultado temporal en la página; los estados, puntos y guías conservan su valor.
+  El agente de escritorio autónomo continúa fuera de este bloque.
+- Rutas privadas GET/POST con sesión de propietario, correo verificado,
+  pertenencia conjunta, respuestas sin caché y entrada cerrada. Contexto limitado
+  a diez reglas reconocidas, estados, puntos/cobertura y textos del catálogo;
+  excluye identidad, UUID, fechas, evidencia libre, feedback y credenciales.
+- Cliente HTTP hacia OmniRoute, modelo OpenRouter gratuito explícito, respuesta
+  JSON cerrada, límites de tamaño/tiempo, sin redirecciones o reintentos.
+  Cinco intentos por cuenta/día UTC, concurrencia global/cuota en memoria y
+  guías locales ante indisponibilidad o respuesta incompatible. Texto escapado;
+  acciones y referencias siguen procediendo de la guía local. No hay chatbot.
+- Helper `configure-ai.ps1` para estado, configuración y desactivación; JSON
+  externo al repositorio y clave DPAPI CurrentUser con permisos usuario/SYSTEM.
+  Probados configuración/reemplazo, reutilización cifrada, modelo inválido,
+  desactivación repetida y permisos con datos ficticios en carpeta aislada.
+- **371 pruebas API y 145 del agente aprobadas**, 40 PostgreSQL omitidas
+  explícitamente. Incluye **99 pruebas nuevas de IA** (33 servicio, 66 proveedor
+  HTTP ficticio). **101 unitarias web y 11 E2E aisladas aprobadas**; tipos y build
+  web correctos. Compilación API sin errores ni advertencias.
+- API local actualizada; salud/readiness 200 y ruta anónima 401 con `no-store`.
+  Sin nueva migración o cambios de `.env`; no se consultó un proveedor real.
+  Función desactivada, sin modelo o clave de producto reales. OmniRoute ya tiene
+  contraseña; faltan configuración privada de proveedor/permisos y activación.
+- [Guía y configuración](docs/AI_EXPLANATIONS.md), ADR-0041 y privacidad actualizados.
+
+## Entorno local — apoyo de desarrollo con OmniRoute, 2026-10-25
+
+- OmniRoute 3.8.52 y 45 skills instalados fuera del repositorio. Panel/DB locales,
+  loopback, ACL usuario/SYSTEM, inicio/parada/reinicio y acceso desde Inicio comprobados.
+- Cliente MCP local de tres operaciones registrado en Codex: salud, catálogo y
+  consulta textual. Credencial propia DPAPI sin scopes de gestión y allowlist de
+  modelos inicialmente vacía; consultas externas desactivadas. Modelo gratuito
+  explícito, límites de entrada/salida/tiempo y ausencia de reintentos.
+- Smoke del protocolo y rechazo de inferencia desactivada aprobado; bloquea lecturas
+  de credenciales y peticiones privadas durante esa prueba. Configuración existente
+  de Codex preservada salvo la nueva entrada, con copia protegida. No se probó un
+  proveedor: falta contraseña del panel, cuenta gratuita y selección de modelo.
+- Posible integración de IA en el producto explicada, sin implementación. No se
+  cambian el cálculo de puntos, guías locales, rutas, datos o configuración de la app.
+- [Configuración y uso](docs/OMNIROUTE_DEVELOPMENT.md).
+
+## Sin publicar — ensayo de accesos restaurados, 2026-10-25
+
+- Nuevo `backup.ps1 -Action rehearse -File ...`: autentica la copia, restaura y
+  compara su inventario antes de preparar exclusivamente su temporal propia.
+  `create` y `verify` conservan sus contratos. No acepta destino de restauración.
+- Política cerrada de 17 tablas, columnas/tipos/nulabilidad y migración revisada.
+  Transacción serializable con locks solo en la temporal y comprobación previa
+  del inventario. Retira sesiones/refresh/tokens/códigos/credenciales, solicitudes
+  de correo y cola cifrada; renueva versiones y revoca equipos.
+- Comprueba ocho tablas completas y proyecciones de usuarios/dispositivos que
+  excluyen solo las columnas modificadas. Conserva perfil, hashes de contraseña,
+  informes, feedback, catálogo, marcas de borrado, cuota y actividad. Una diferencia
+  o fallo SQL revierte la transacción; la temporal se retira en `finally`.
+- Informe de cantidades y comprobaciones, con `activeDatabaseReplaced` y
+  `laterDeletionsReconciled` en false. Sin host/worker/SMTP ni acceso a claves
+  DPAPI. No mantiene destino recuperado, no concilia borrados futuros ni sustituye
+  decisiones de incidente, secretos, RPO/RTO o copia externa.
+- **272 pruebas habituales aprobadas**, 40 PostgreSQL omitidas explícitamente.
+  **Ocho PostgreSQL aprobadas aparte:** tres anteriores de backup y cinco nuevas,
+  junto con CLI create/verify/rehearse y contraseña incorrecta. Build .NET sin
+  advertencias/errores. Tres pruebas nuevas sin PostgreSQL de guardas/contrato.
+- API en fixture PostgreSQL rechazó JWT/refresh, verificación/reset, confirmación
+  de correo, código de vinculación y credencial de agente anteriores; nuevo login
+  funcionó. Ensayos adicionales de rollback por error SQL/mutación de contenido,
+  esquema/columnas/migración desconocidos, destino incorrecto y archivo/origen
+  intactos ante éxito, contraseña incorrecta, alteración y cancelación.
+- Huellas de diez tablas personales conservadas; cero cuentas E2E y bases
+  temporales al finalizar. Sin cambios en `.env`, esquema activo, frontend o
+  agente en este bloque. Las otras suites PostgreSQL, frontend y agente conservan
+  la evidencia previa documentada. Sin commit, push o despliegue. VM pospuesta.
+- [Uso y límites](docs/RECOVERY_REHEARSAL.md), ADR-0040 y procedimiento operativo actualizados.
+
+## Sin publicar — diagnóstico operativo de cola, 2026-10-25
+
+- `status.ps1` agrega total, listos/en espera/reservados/vencidos/agotados,
+  pendientes con intentos previos, antigüedad y fechas del próximo intento/reserva.
+  Conserva HTTP/readiness y SMTP NOOP; sin correo de prueba.
+- Nuevo helper `email-queue-status.ps1` con resumen JSON y compilación independiente
+  en `StatusTools`, reutilizable con `-NoBuild`. Conexión solo por entorno del
+  proceso hijo, nunca argumentos. Errores fijos, sin mensajes de Npgsql/SQL o secretos.
+- CLI sale antes del host web, sin JWT/SMTP/DPAPI, worker, migraciones o endpoint.
+  Consulta agregada READ ONLY con espera de locks/comando acotados. No selecciona
+  payloads, cuentas o ids de mensajes. No modifica vigencias, intentos o reservas.
+- Avisos iniciales a 100 pendientes/10 minutos, ajustables por comando; también
+  por vencidos o agotados esperando retirada. Reservas activas tienen prioridad
+  al clasificar el último intento. Salidas 0 normal, 3 atención, 1 no comprobado;
+  fallos HTTP/SMTP prevalecen sobre avisos. No son métricas persistentes o alertas externas.
+- **269 pruebas habituales aprobadas** (35 PostgreSQL omitidas). **Doce PostgreSQL
+  aprobadas aparte:** seis de cola anteriores y seis nuevas de diagnóstico, CLI
+  y scripts. Seis pruebas unitarias nuevas comprueban umbrales, fechas, forma
+  cerrada y argumentos. Build .NET sin advertencias/errores.
+- Los ensayos verifican invariancia de filas, contenido ficticio indescifrable,
+  cola vacía, reservas/agotamiento, errores sin secretos, conexión rechazada,
+  esquema ausente y tabla bloqueada. HTTP/SMTP ficticios confirman solo NOOP/QUIT
+  y prioridad de códigos. Clases PostgreSQL serializadas, bases temporales retiradas.
+- Consulta real con `status.ps1`: HTTP/readiness/SMTP disponibles y cola vacía,
+  salida 0. Datos personales conservados. Sin nuevos cambios de esquema, agente,
+  web o `.env`; no se repitieron frontend, agente o las otras tres suites PostgreSQL,
+  comprobadas en el bloque previo. Sin commit, push o despliegue.
+- [Uso y protocolo](docs/EMAIL_QUEUE_DIAGNOSTICS.md).
+
+## Sin publicar — cola cifrada persistente, 2026-10-25
+
+- El usuario continúa los bloques de software y avisará cuando instale la VM.
+  Compatibilidad externa permanece pospuesta; no se amplió el agente ni se
+  eligieron proveedores de correo/hosting o datos públicos del responsable.
+- `account_email_outbox` incorpora contenido cifrado, FK/cascada de usuario,
+  fechas, intentos, reserva y versión, con columnas en español. El productor
+  participa del mismo commit que registro, recuperación, contraseña o correo.
+  Fallar al preparar/guardar la cola no deja una operación parcialmente confirmada.
+- Worker reclama mediante `FOR UPDATE SKIP LOCKED`, confirma una reserva de dos
+  minutos y entrega fuera de la transacción. Reintentos/espera sobreviven al reinicio.
+  Revalida dueño, vigencia y enlaces actuales antes de SMTP. Retira entregados,
+  vencidos, obsoletos, indescifrables y agotados; no hay historial de contenidos.
+- Data Protection liga el contenido a dueño/fila. Claves persistentes fuera del
+  repositorio bajo DPAPI CurrentUser de la API, ACL usuario/SYSTEM y rechazo de
+  uniones. La implementación persistente actual requiere Windows con perfil;
+  otro alojamiento necesita protección/custodia acordadas. Testing es efímero
+  explícito; el ensayo separado usa un anillo DPAPI real reabierto.
+- Vigencia predeterminada de cola pasa de cinco a sesenta minutos (1–1440), sin
+  extender tokens. Máximo de intentos y timeout SMTP conservados. Una cancelación
+  puede consumir intento y conservar reserva; SMTP incierto puede duplicar envíos.
+- Migración `20261025143028_DurableAccountEmailOutbox` aplicada en local después de
+  copia cifrada `created-and-verified`, con dieciséis tablas de la instantánea
+  anterior. Copia y contraseña protegida con DPAPI conservadas en
+  `%LOCALAPPDATA%\SecurityCenterAI\Backups\migration_mail_89e129b1111a4215bd4cba7b8a63d0eb`.
+  No se restauró sobre la base activa. Down rechaza cola no vacía.
+- **263 pruebas habituales aprobadas**, 29 PostgreSQL omitidas allí y aprobadas
+  aparte: 16 cuentas/actividad, 4 retención, 3 backup y **6 nuevas de outbox**.
+  Estas comprueban rollback real, reservas concurrentes, cascada, exclusión en
+  exportación, restart de API/anillo DPAPI y reserva interrumpida/downgrade.
+  Bases temporales retiradas. Build .NET sin advertencias/errores y tipos/build web aprobados.
+- Navegador: recorrido completo e información pública aprobados. Dos casos
+  históricos de cuenta detectaron selectores ambiguos entre filtro y evento;
+  se precisaron a la lista y **los cinco casos de cuenta aprobaron juntos**.
+  Son nueve casos distintos comprobados entre ambas corridas, sin afirmar una
+  corrida completa de toda la suite histórica. No se repitieron las 145 pruebas
+  del agente ni las 96 unidades web, cuyos módulos no cambian en este bloque.
+- Privacidad pública/inventario, backups, recuperación, arquitectura y pendientes
+  reflejan el almacenamiento cifrado recuperable. Sin cambios en `.env`, paquete
+  del agente o proveedores; estos cambios están después de `0ae2c30`, sin commit
+  nuevo, push o despliegue. [Uso y límites](docs/MAIL_DELIVERY.md).
+
 ## Sin publicar — información pública y cierre local 1.0, 2026-10-24
 
 - `/privacy` y `/terms` accesibles antes del registro, con estado de borrador,

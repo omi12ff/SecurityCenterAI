@@ -5,7 +5,8 @@ Implementado localmente el 2026-10-24 para la primera versión.
 ## Páginas y estado
 
 - `/privacy`: descripción de cuenta, equipos, informes, feedback, cookies,
-  revisión de enlaces/mensajes, archivos locales, exportación/borrado y conservación.
+  revisión de enlaces/mensajes, explicación opcional de IA por análisis, archivos
+  locales, exportación/borrado y conservación.
 - `/terms`: alcance y límites de la prueba, diez comprobaciones, cuota del detector,
   uso autorizado del equipo, accesos y condiciones aún por definir.
 - `/report-problem`: preparación local de un reporte; no recibe o envía tickets.
@@ -54,13 +55,27 @@ de compartir la copia por su cuenta.
 El contenido deriva del [inventario técnico](../PRIVACY_NOTES.md), los flujos de
 cuenta y las capacidades del agente. Se corrigieron referencias antiguas a doce
 tablas, ausencia de edición de perfil y agente en preparación; el modelo actual
-tiene quince tablas. La landing describe el servicio de actualizaciones y no
+tiene dieciséis tablas tras incorporar la cola cifrada de correo. La página de
+privacidad describe también ese material pendiente recuperable. La landing describe el servicio de actualizaciones y no
 anuncia detección de reinicios pendientes, que el agente no implementa.
 
 Se consultó el [checklist de transparencia del ICO](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/the-right-to-be-informed/what-privacy-information-should-we-provide/)
 solo como referencia estructural sobre identidad/contacto, finalidades y conservación;
 no determina la jurisdicción de este proyecto ni acredita cumplimiento.
-No se agregan servicios, dependencias o datos a PostgreSQL.
+El bloque inicial de páginas públicas no agregó servicios, dependencias o datos
+a PostgreSQL.
+
+La revisión del 2026-10-25 añade a privacidad la explicación opcional de IA,
+desactivada por defecto. El texto usa condiciones: solo habría envío tras
+configurar y habilitar el módulo y confirmar una consulta. El estado revisado
+el 2026-10-26 registra la configuración del producto habilitada por el usuario,
+con clave de producto y `openrouter/free`; la API ya se reinició con el alias
+corregido y quedó habilitada para una prueba explícita desde la interfaz.
+La lectura del catálogo autenticado no acredita inferencia real y no
+se envió un análisis al proveedor. Describe el contexto reducido y las exclusiones, resultados temporales
+sin historial de IA y condiciones externas aún por revisar. No cambia el estado
+de borrador ni resuelve responsable, país, contacto o políticas finales.
+[Contrato del módulo](AI_EXPLANATIONS.md).
 
 Pruebas y limitaciones en [CHANGELOG.md](../CHANGELOG.md). La captura opcional de
 estas páginas usa `E2E_CAPTURE_INFORMATION=1` con datos ficticios y salida ignorada.

@@ -12,7 +12,7 @@ namespace SecurityCenterAI.Api.Services;
 
 public sealed class AccountService(AppDbContext database, IPasswordHasher<User> passwordHasher,
     ITokenService tokens, IAccountEmailSender emailSender, IOptions<AuthSecurityOptions> settings,
-    TimeProvider clock, ILogger<AccountService> logger)
+    TimeProvider clock)
 {
     public const string VerificationPurpose = "email-verification";
     public const string PasswordResetPurpose = "password-reset";
@@ -34,10 +34,10 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         user.LastVerificationSentAtUtc = Now;
         var response = AddSession(user);
         SecurityActivityRecorder.Add(database, user.Id, SecurityActivityKind.AccountRegistered, Now);
+        await emailSender.QueueAsync(user.Id, new(user.Email, verification, AccountEmailPurpose.EmailVerification), cancellationToken);
         try { await database.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         { database.ChangeTracker.Clear(); return null; }
-        await DeliverAsync(new AccountEmail(user.Email, verification, AccountEmailPurpose.EmailVerification), cancellationToken);
         return response;
     }
 
@@ -138,10 +138,10 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
             user.LastPasswordResetRequestedAtUtc = Now;
             user.ConcurrencyStamp = Guid.NewGuid();
             var token = await AddActionTokenAsync(user, PasswordResetPurpose, cancellationToken);
+            await emailSender.QueueAsync(user.Id, new(user.Email, token, AccountEmailPurpose.PasswordReset), cancellationToken);
             try { await database.SaveChangesAsync(cancellationToken); }
             catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
             { database.ChangeTracker.Clear(); return; }
-            await DeliverAsync(new AccountEmail(user.Email, token, AccountEmailPurpose.PasswordReset), cancellationToken);
         }
         finally
         {
@@ -158,10 +158,10 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         user.LastVerificationSentAtUtc = Now;
         user.ConcurrencyStamp = Guid.NewGuid();
         var token = await AddActionTokenAsync(user, VerificationPurpose, cancellationToken);
+        await emailSender.QueueAsync(user.Id, new(user.Email, token, AccountEmailPurpose.EmailVerification), cancellationToken);
         try { await database.SaveChangesAsync(cancellationToken); }
         catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
         { database.ChangeTracker.Clear(); return; }
-        await DeliverAsync(new AccountEmail(user.Email, token, AccountEmailPurpose.EmailVerification), cancellationToken);
     }
 
     public async Task<bool> VerifyEmailAsync(string token, CancellationToken cancellationToken)
@@ -202,10 +202,10 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         var emailChange = await database.EmailChangeRequests.SingleOrDefaultAsync(item => item.UserId == action.UserId, cancellationToken);
         if (emailChange is not null) database.EmailChangeRequests.Remove(emailChange);
         SecurityActivityRecorder.Add(database, action.UserId, SecurityActivityKind.PasswordReset, Now);
+        await emailSender.QueueAsync(action.UserId, new(action.User.Email, "", AccountEmailPurpose.PasswordResetCompleted), cancellationToken);
         try { await database.SaveChangesAsync(cancellationToken); }
         catch (Exception exception) when (ConcurrentWrite(exception) || exception is DbUpdateException update && OwnerRemoved(update))
         { database.ChangeTracker.Clear(); return false; }
-        await DeliverAsync(new(action.User.Email, "", AccountEmailPurpose.PasswordResetCompleted), CancellationToken.None);
         return true;
     }
 
@@ -275,7 +275,7 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
 
     private static bool OwnerRemoved(DbUpdateException exception) => exception.InnerException is PostgresException
         { SqlState: PostgresErrorCodes.ForeignKeyViolation, ConstraintName:
-            "FK_user_sessions_users_UserId" or "FK_refresh_credentials_user_sessions_UserSessionId" or "FK_account_action_tokens_users_UserId" or "FK_security_activity_users_id_usuario" };
+            "FK_user_sessions_users_UserId" or "FK_refresh_credentials_user_sessions_UserSessionId" or "FK_account_action_tokens_users_UserId" or "FK_security_activity_users_id_usuario" or "FK_account_email_outbox_users_id_usuario" };
 
     private static bool ConcurrentWrite(Exception exception) => exception is DbUpdateConcurrencyException ||
         exception is InvalidOperationException { InnerException: { } inner } && ConcurrentWrite(inner) ||
@@ -283,11 +283,4 @@ public sealed class AccountService(AppDbContext database, IPasswordHasher<User> 
         exception is DbUpdateException { InnerException: PostgresException
             { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure } };
 
-    private async Task DeliverAsync(AccountEmail message, CancellationToken cancellationToken)
-    {
-        try { await emailSender.SendAsync(message, cancellationToken); }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
-        { logger.LogWarning(SecurityCenterAI.Api.Services.Operations.SafeOperationalLogging.EmailQueueRejected,
-            "No se pudo encolar un correo de cuenta. Revisá la disponibilidad del transporte SMTP."); }
-    }
 }

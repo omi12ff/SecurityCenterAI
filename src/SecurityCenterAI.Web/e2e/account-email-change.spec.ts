@@ -49,7 +49,7 @@ test('dos direcciones se confirman antes de finalizar el cambio y cerrar las ses
     for (const secret of [account.password, owner.accessToken, 'http://', 'https://']) expect(notice.includes(secret)).toBe(false);
   }
   await loginAccount(page, { ...account, email: target.email }); await page.goto('/account/activity');
-  await expect(page.getByText('Correo cambiado', { exact: true })).toBeVisible();
+  await expect(page.getByRole('list').getByText('Correo cambiado', { exact: true })).toBeVisible();
 });
 
 test('la vista móvil permite cancelar, invalida los enlaces y mantiene el correo actual', async ({ page, account, newAccount }) => {

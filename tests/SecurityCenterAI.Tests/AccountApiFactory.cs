@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -13,13 +14,15 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SecurityCenterAI.Api.Configuration;
 using SecurityCenterAI.Api.Services;
+using SecurityCenterAI.Api.Services.Ai;
 using SecurityCenterAI.Infrastructure.Persistence;
 
 namespace SecurityCenterAI.Tests;
 
 internal sealed class AccountApiFactory(int authPermitLimit = 1000, int globalPermitLimit = 2000,
     int agentPairPermitLimit = 1000, int devicePermitLimit = 1000, int analysisPermitLimit = 1000, int accountExportPermitLimit = 1000,
-    int accountDeletionPermitLimit = 1000, string? postgresConnection = null, int accountPasswordPermitLimit = 1000, int maxActiveSessions = 10, int emailChangePermitLimit = 1000, int linkMessageDailyLimit = 25)
+    int accountDeletionPermitLimit = 1000, string? postgresConnection = null, int accountPasswordPermitLimit = 1000, int maxActiveSessions = 10, int emailChangePermitLimit = 1000, int linkMessageDailyLimit = 25, bool durableEmail = false, IDataProtectionProvider? emailProtectionProvider = null, bool recoveryFixture = false,
+    IReadOnlyDictionary<string, string?>? aiExplanationConfiguration = null, IAiExplanationProvider? aiExplanationProvider = null)
     : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = Guid.NewGuid().ToString();
@@ -46,7 +49,7 @@ internal sealed class AccountApiFactory(int authPermitLimit = 1000, int globalPe
                 ["AuthSecurity:MaxActiveSessions"] = maxActiveSessions.ToString(),
                 ["RateLimits:AccountEmailChangePermitLimit"] = emailChangePermitLimit.ToString(),
                 ["LinkMessageChecks:DailyLimit"] = linkMessageDailyLimit.ToString()
-            }));
+            }.Concat(aiExplanationConfiguration ?? new Dictionary<string, string?>())));
         builder.ConfigureLogging(logging => logging.ClearProviders());
         builder.ConfigureServices(services =>
         {
@@ -58,15 +61,29 @@ internal sealed class AccountApiFactory(int authPermitLimit = 1000, int globalPe
                 {
                     var parsed = new Npgsql.NpgsqlConnectionStringBuilder(postgresConnection) { Pooling = false };
                     if (parsed.Host != "127.0.0.1" || parsed.Port != 5432 ||
-                        !System.Text.RegularExpressions.Regex.IsMatch(parsed.Database ?? "", "^scai_audit_test_[a-f0-9]{32}$"))
-                        throw new InvalidOperationException("Refused a PostgreSQL database outside the isolated audit namespace.");
+                        !System.Text.RegularExpressions.Regex.IsMatch(parsed.Database ?? "", recoveryFixture
+                            ? "^scai_restore_test_[a-f0-9]{32}$" : "^scai_audit_test_[a-f0-9]{32}$"))
+                        throw new InvalidOperationException("Refused a PostgreSQL database outside the isolated test namespace.");
                     options.UseNpgsql(parsed.ConnectionString);
                 }
             });
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Clock);
-            services.RemoveAll<IAccountEmailSender>();
-            services.AddSingleton<IAccountEmailSender>(Email);
+            if (aiExplanationProvider is not null)
+            {
+                services.RemoveAll<IAiExplanationProvider>();
+                services.AddSingleton(aiExplanationProvider);
+            }
+            if (emailProtectionProvider is not null)
+            {
+                services.RemoveAll<IDataProtectionProvider>();
+                services.AddSingleton(emailProtectionProvider);
+            }
+            if (!durableEmail)
+            {
+                services.RemoveAll<IAccountEmailSender>();
+                services.AddScoped<IAccountEmailSender>(provider => new TransactionalTestEmailSender(provider.GetRequiredService<AppDbContext>(), Email));
+            }
         });
     }
 
@@ -107,24 +124,40 @@ internal sealed class TestClock : TimeProvider
     public void Advance(TimeSpan duration) => _now = _now.Add(duration);
 }
 
-internal sealed class CapturedAccountEmailSender : IAccountEmailSender
+internal sealed class CapturedAccountEmailSender
 {
     public AccountEmailPurpose? RejectedPurpose { get; set; }
     private readonly ConcurrentQueue<AccountEmail> _messages = new();
     public AccountEmail[] Messages => _messages.ToArray();
 
-    public Task SendAsync(AccountEmail message, CancellationToken cancellationToken)
+    public void RequireAvailable(AccountEmail message)
     {
         if (message.Purpose == RejectedPurpose) throw new InvalidOperationException("Fictitious email transport failure.");
-        _messages.Enqueue(message);
-        return Task.CompletedTask;
     }
+    public void Capture(AccountEmail message) => _messages.Enqueue(message);
 
     public string TokenFor(string recipient, AccountEmailPurpose purpose)
     {
         var message = _messages.LastOrDefault(item => item.Recipient == recipient && item.Purpose == purpose);
         Assert.True(message is not null, "The isolated email sender should receive the requested account message.");
         return message!.Token;
+    }
+}
+
+internal sealed class TransactionalTestEmailSender : IAccountEmailSender
+{
+    private readonly CapturedAccountEmailSender _capture;
+    private readonly List<AccountEmail> _pending = [];
+    public TransactionalTestEmailSender(AppDbContext database, CapturedAccountEmailSender capture)
+    {
+        _capture = capture;
+        database.SavedChanges += (_, _) => { foreach (var message in _pending) _capture.Capture(message); _pending.Clear(); };
+        database.SaveChangesFailed += (_, _) => _pending.Clear();
+    }
+    public Task QueueAsync(Guid userId, AccountEmail message, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested(); _capture.RequireAvailable(message); _pending.Add(message);
+        return Task.CompletedTask;
     }
 }
 

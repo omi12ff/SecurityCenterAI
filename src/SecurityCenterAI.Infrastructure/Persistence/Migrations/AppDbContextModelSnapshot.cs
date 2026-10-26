@@ -64,6 +64,70 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                     b.ToTable("account_action_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.AccountEmailOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_correo");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("intentos");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_concurrencia");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_creacion_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_expiracion_utc");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_fin_reserva_utc");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_reserva");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_proximo_intento_utc");
+
+                    b.Property<string>("ProtectedPayload")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)")
+                        .HasColumnName("contenido_cifrado");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id_usuario");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("NextAttemptAtUtc", "Id");
+
+                    b.ToTable("account_email_outbox", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_account_email_outbox_intentos", "intentos >= 0 AND intentos <= 5");
+
+                            t.HasCheckConstraint("CK_account_email_outbox_reserva", "(id_reserva IS NULL) = (fecha_fin_reserva_utc IS NULL)");
+
+                            t.HasCheckConstraint("CK_account_email_outbox_vigencia", "fecha_expiracion_utc > fecha_creacion_utc");
+                        });
+                });
+
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.AnalysisFeedback", b =>
                 {
                     b.Property<Guid>("Id")
@@ -867,6 +931,15 @@ namespace SecurityCenterAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SecurityCenterAI.Domain.Entities.AccountEmailOutbox", b =>
+                {
+                    b.HasOne("SecurityCenterAI.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SecurityCenterAI.Domain.Entities.AnalysisFeedback", b =>

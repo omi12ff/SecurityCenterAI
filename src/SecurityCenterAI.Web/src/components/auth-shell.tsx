@@ -68,7 +68,6 @@ export function AuthShell({ mode, children }: AuthShellProps) {
         </Link>
 
         <div className="auth-story-content">
-          <div className="story-eyebrow"><span /> TU CENTRO DE SEGURIDAD</div>
           <h2>Más claridad.<br /><span>Más tranquilidad.</span></h2>
           <p>Tu cuenta, tu dashboard y tu historial.<br />Todo en un mismo lugar.</p>
           <SecurityIllustration />
@@ -86,7 +85,6 @@ export function AuthShell({ mode, children }: AuthShellProps) {
         <div className="auth-main-top"><span>¿{isLogin ? "Aún no tenés" : "Ya tenés"} una cuenta?</span><Link href={isLogin ? "/register" : "/login"}>{isLogin ? "Crear cuenta" : "Iniciar sesión"}<span aria-hidden="true">↗</span></Link></div>
         <section className="auth-card" aria-labelledby="auth-title">
           <div className="auth-heading-icon"><ShieldMark /></div>
-          <p className="auth-eyebrow">{isLogin ? "BIENVENIDO DE NUEVO" : "EMPECEMOS"}</p>
           <h1 id="auth-title">{isLogin ? "Iniciá sesión en tu cuenta" : "Creá tu cuenta"}</h1>
           <p className="auth-description">{isLogin ? "Accedé a tu dashboard y continuá donde lo dejaste." : "Configurá tu acceso a Security Center AI."}</p>
           {children}

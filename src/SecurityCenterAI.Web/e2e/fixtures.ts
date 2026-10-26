@@ -1,3 +1,4 @@
+import { postgresExecArgs } from './database.ts';
 import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -23,7 +24,7 @@ function runAccountSql(email: string, sql: string) {
   }
 
   const result = spawnSync('docker', [
-    'compose', 'exec', '-T', 'postgres', 'sh', '-c',
+    ...postgresExecArgs(), 'sh', '-c',
     'exec psql --no-psqlrc --set=ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=cleanup_email="$1"',
     'cleanup-e2e', email,
   ], {

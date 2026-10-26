@@ -35,15 +35,16 @@ invalida enlaces de cuenta anteriores. La web elimina cookies y muestra el motiv
 en login. No cancela operaciones ya autorizadas antes del cierre.
 
 Correo verificado, revocación de sesiones, consumo de enlaces, borrado de la
-solicitud y evento `email.changed` se confirman juntos. El evento no contiene
-direcciones, ids de sesión o texto libre. Se intenta enviar un aviso sin enlaces
-o credenciales a ambos correos después del commit. La cola sigue volátil: el aviso
-no garantiza entrega ni revierte un cambio completado.
+solicitud, evento `email.changed` y avisos cifrados se confirman juntos. El evento
+no contiene direcciones, ids de sesión o texto libre. El worker intenta enviar
+los avisos sin enlaces o credenciales a ambos correos después del commit.
+La cola sobrevive a reinicios; SMTP aceptado no garantiza bandeja final.
 
 Cambiar o recuperar la contraseña cancela solicitudes de correo pendientes.
 Recuperación conserva su alcance de cierre web e invalidación de códigos y
 credenciales de agentes; ahora también envía un aviso posterior sin enlace,
-contraseña o token. Un fallo de ese aviso no deshace la recuperación.
+contraseña o token. La recuperación y el registro cifrado del aviso son atómicos;
+un fallo posterior de SMTP no deshace la recuperación. [Cola y límites](MAIL_DELIVERY.md).
 
 ## API y controles
 

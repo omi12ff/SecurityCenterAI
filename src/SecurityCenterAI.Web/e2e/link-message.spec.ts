@@ -1,3 +1,4 @@
+import { postgresExecArgs } from './database.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,7 +10,7 @@ function seedQuota(account: TestAccount, count: number, previousDay = false) {
   if (!/^e2e-[0-9a-f-]+@example\.invalid$/.test(account.email) || !Number.isInteger(count) || count < 0 || count > 1000) throw new Error('Unsafe quota fixture.');
   let root = process.cwd();
   while (!existsSync(join(root, 'SecurityCenterAI.sln'))) { const parent = dirname(root); if (parent === root) throw new Error('Repository missing.'); root = parent; }
-  const fixtureProcess = spawnSync('docker', ['compose', 'exec', '-T', 'postgres', 'sh', '-c',
+  const fixtureProcess = spawnSync('docker', [...postgresExecArgs(), 'sh', '-c',
     'exec psql --no-psqlrc --set=ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=fixture_email="$1"', 'quota-e2e', account.email], {
     cwd: root, encoding: 'utf8', windowsHide: true, timeout: 30_000,
     input: `INSERT INTO link_message_usage(id_usuario,dia_utc,consultas_realizadas,version_concurrencia)

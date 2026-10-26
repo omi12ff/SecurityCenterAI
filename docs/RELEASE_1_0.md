@@ -1,6 +1,6 @@
 # Alcance y cierre de la primera versión
 
-Revisado: 2026-10-24. Objetivo acordado: completar el software de la **1.0 gratuita**
+Revisado: 2026-10-26. Objetivo acordado: completar el software de la **1.0 gratuita**
 de la [guía maestra](Guia_Maestra_Security_Center_AI_Actualizada.pdf), página 7.
 La versión 1.0 del PDF identifica el documento y no una release publicada.
 
@@ -20,7 +20,7 @@ la compatibilidad pendiente debe seguir visible antes de anunciar un lanzamiento
 | Entre 8 y 12 verificaciones | Diez reglas con resultados parciales y evidencia limitada. | Ampliar validación real cuando haya otro entorno disponible. |
 | Análisis manual e historial básico | Implementado; consulta, explicación, comparación, exportación y borrado. Primeros pasos e historial compacto comprobados en el recorrido integrado con informes ficticios. | Compatibilidad real ampliada y revisión para publicación. |
 | Detector de enlaces y mensajes, con límite diario | Implementado y probado localmente, con reglas y contador persistente por cuenta. | Revisión final antes de publicar; no garantiza reputación o ausencia de fraude. |
-| Explicaciones y pasos en español | Guías locales implementadas. | Se mantiene la elección del usuario de no integrar IA externa. |
+| Explicaciones y pasos en español | Guías locales y explicación de IA opcional por análisis, desactivada por defecto. El usuario habilitó la configuración con clave de producto y `openrouter/openrouter/free`; ruta con proveedor explícito validada con datos ficticios y API reiniciada, lista para una prueba explícita desde la interfaz. | Revisar datos/retención antes de una consulta confirmada; hay una respuesta real sintética comprobada; el informe personal no se usó en esa prueba. La guía local queda siempre disponible. [Alcance](AI_EXPLANATIONS.md). |
 | Privacidad, términos y canal de errores | Páginas públicas en borrador y preparación local de reportes implementadas. | Responsable, país, contacto, revisión de políticas y canal real de recepción antes de publicar. |
 
 ## Recordatorio: datos para las páginas públicas
@@ -50,6 +50,12 @@ se puede continuar con los demás bloques de software de la 1.0.
 5. Recorrido integrado local incorporado y comprobado con cuenta/informes ficticios.
    [Alcance de la validación](RELEASE_VALIDATION.md). Revisión final de cambios y
    preparación de publicación pendientes; no se crea una release automáticamente.
+6. Explicación opcional de IA autorizada posteriormente: contexto reducido,
+   solicitud explícita con botón, cuota y alternativa local. Adaptador desactivado por
+   defecto. La configuración local ya fue habilitada por el usuario con su clave
+   y modelo; la API ya se reinició con el alias corregido y quedó habilitada para
+   una prueba explícita desde la interfaz. Se comprobó una respuesta real con diez estados ficticios.
+   [Configuración y límites](AI_EXPLANATIONS.md).
 
 Las pruebas en otra PC quedan pospuestas, no aprobadas. Para publicación también
 siguen pendientes hosting/dominio/TLS, secretos y permisos, correo externo,
@@ -62,6 +68,10 @@ Automatización/alertas de 1.1, drivers/salud de 1.2, escritorio/bandeja de 1.3,
 familia de 1.5 y monetización de 2.0 conservan sus etapas. La comparación manual
 ya adelantada se conserva. Tampoco se reemplaza el antivirus o se ejecutan
 correcciones arbitrarias en el equipo.
+
+La visión posterior de escritorio incluye bandeja y vigilancia/autonomía
+acotadas por plan, alcance y aprobaciones explícitas. No están implementadas y
+no se habilitan con la explicación opcional de este bloque.
 
 Evidencia real por bloque en el [changelog](../CHANGELOG.md); una fila implementada
 localmente no equivale a validación pública, revisión de PR o soporte para todas

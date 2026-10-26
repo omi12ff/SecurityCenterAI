@@ -12,21 +12,7 @@ $webRoot = Join-Path $repositoryRoot 'src\SecurityCenterAI.Web'
 $nextEnvPath = Join-Path $webRoot 'next-env.d.ts'
 $originalNextEnv = [IO.File]::ReadAllBytes($nextEnvPath)
 $previousQa = [Environment]::GetEnvironmentVariable('SECURITY_CENTER_WEB_QA', 'Process')
-if ($IncludeE2E) {
-    foreach ($target in @(@('E2E_BASE_URL', 'http://localhost:3000'), @('E2E_API_BASE_URL', 'http://localhost:5169'))) {
-        $configured = [Environment]::GetEnvironmentVariable($target[0], 'Process')
-        if ([string]::IsNullOrWhiteSpace($configured)) { $configured = $target[1] }
-        $endpointUri = $null
-        $address = $null
-        if (-not [Uri]::TryCreate($configured, [UriKind]::Absolute, [ref]$endpointUri) -or
-            $endpointUri.Scheme -notin @('http', 'https') -or $endpointUri.UserInfo -or
-            $endpointUri.Query -or $endpointUri.Fragment -or $endpointUri.AbsolutePath -ne '/' -or
-            -not ($endpointUri.Host -ieq 'localhost' -or
-                ([Net.IPAddress]::TryParse($endpointUri.Host, [ref]$address) -and [Net.IPAddress]::IsLoopback($address)))) {
-            throw 'E2E solo se admite contra direcciones HTTP(S) de loopback, sin credenciales, query o fragmento.'
-        }
-    }
-}
+# The E2E runner generates its own loopback URLs and overrides inherited targets.
 $outputRoot = Join-Path $repositoryRoot "src\SecurityCenterAI.Api\bin\$Configuration\net8.0"
 $apiExecutable = [IO.Path]::GetFullPath((Join-Path $outputRoot 'SecurityCenterAI.Api.exe'))
 $apiAssembly = [IO.Path]::GetFullPath((Join-Path $outputRoot 'SecurityCenterAI.Api.dll'))
@@ -53,7 +39,7 @@ try {
         Invoke-Verification dotnet @('test', $testProject, '--configuration', $Configuration, '--no-build', '--nologo', '--verbosity', 'minimal') "Pruebas .NET: $testProject"
     }
     if ($IncludePostgres) {
-        foreach ($script in @('test-security-activity.ps1', 'test-retention.ps1', 'test-backup.ps1')) {
+        foreach ($script in @('test-security-activity.ps1', 'test-retention.ps1', 'test-backup.ps1', 'test-email-outbox.ps1')) {
             Invoke-Verification powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot $script), '-Configuration', $Configuration) "Pruebas PostgreSQL aisladas: $script"
         }
     }
@@ -66,9 +52,9 @@ try {
         Invoke-Verification npm.cmd @('run', 'build') 'Compilacion web de produccion con salida QA...'
         if ($IncludeE2E) {
             [Environment]::SetEnvironmentVariable('SECURITY_CENTER_WEB_QA', $previousQa, 'Process')
-            Invoke-Verification npm.cmd @('run', 'test:e2e') 'E2E contra la API y web ya iniciadas...'
+            Invoke-Verification node @((Join-Path $repositoryRoot 'scripts\test-web-e2e.mjs'), '--configuration', $Configuration, '--no-build') 'E2E con base, API y web aisladas...'
         }
-        else { Write-Host 'E2E omitido; usa -IncludeE2E con API, web, PostgreSQL y Mailpit locales disponibles.' }
+        else { Write-Host 'E2E omitido; usa -IncludeE2E con PostgreSQL y Mailpit locales disponibles; API y web se inician aparte.' }
     }
     finally { Pop-Location }
     Write-Host 'Verificacion solicitada completada. Consulta las omisiones de cada suite; no implica preparacion para produccion.'

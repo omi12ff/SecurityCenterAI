@@ -4,6 +4,16 @@ Implementado el 22 de octubre de 2026. La elección para este bloque fue usar
 guías locales sin servicio de IA externo. No requiere instalar herramientas ni
 configurar credenciales adicionales.
 
+El 2026-10-25 el usuario autorizó añadir una [explicación opcional de IA por
+análisis](AI_EXPLANATIONS.md), desactivada por defecto y solicitada con botón
+después de revisar el aviso de datos. Este cambio conserva las guías locales y su disponibilidad
+ante fallos; la valoración descrita aquí corresponde a la guía local. Al revisar
+el estado el 2026-10-26, el usuario habilitó la configuración del producto con
+su clave y la ruta explícita `openrouter/openrouter/free`. El adaptador devolvió
+resumen y diez explicaciones válidas en una prueba real con estados ficticios;
+no se utilizó el informe personal. Se muestran razones de fallo y la guía local
+permanece disponible. El usuario pidió retirar la casilla adicional.
+
 ## Cómo usarlo
 
 1. Entrá a **Dispositivos → Ver equipo e historial**.
@@ -69,8 +79,9 @@ quien administra la base local y sus copias puede leerlo. No incluyas secretos.
 El panel **Control de este análisis** permite exportar el resultado con su
 feedback propio o eliminarlo con confirmación. El borrado elimina todo el feedback
 del análisis; una marca mínima impide reenvíos del mismo reporte. Copias descargadas,
-informes locales y backups permanecen. No hay retención automática ni borrado
-completo de cuenta; logout, revocación y reset no borran feedback.
+informes locales y backups permanecen. No hay retención automática de contenido;
+el [borrado de cuenta](ACCOUNT_DELETION.md) elimina su feedback de la base activa.
+Logout, revocación y reset no borran feedback.
 [Uso y límites](ANALYSIS_HISTORY.md). No se guarda el historial de ediciones.
 La versión almacenada identifica la plantilla valorada, no una evaluación de IA.
 
@@ -87,5 +98,6 @@ No publica la aplicación ni inicia una beta externa. Para una sesión de prueba
 
 Antes de invitar usuarios externos siguen pendientes distribución/compatibilidad
 del agente, operación de cuentas/correo, retención, privacidad, alojamiento y los
-controles de producción de [SECURITY.md](../SECURITY.md). Una integración de IA
-externa requerirá una decisión posterior sobre proveedor, datos y límites.
+controles de producción de [SECURITY.md](../SECURITY.md). La explicación opcional
+de IA tiene su [contrato de datos y límites](AI_EXPLANATIONS.md); falta configurar
+y validar un proveedor y revisar sus condiciones antes de habilitar consultas.

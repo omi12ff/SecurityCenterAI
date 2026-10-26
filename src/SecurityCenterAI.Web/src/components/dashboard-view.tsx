@@ -9,6 +9,7 @@ import { AnalysisPrioritiesPanel } from "./analysis-priorities";
 import type { DashboardPriorities } from "@/lib/analysis-priorities";
 import type { DeviceRecord } from "@/lib/devices";
 import { InformationLinks } from "./information-links";
+import { SidebarNav } from "./sidebar-nav";
 
 const dateFormatter = new Intl.DateTimeFormat("es-PY", {
   dateStyle: "medium",
@@ -27,7 +28,6 @@ function analysisDate(value: string) {
 }
 
 export function DashboardView({ user, data, devices, priorities }: { user: UserProfile; data: DashboardData; devices: DeviceRecord[] | null; priorities: DashboardPriorities }) {
-  const firstName = user.name.trim().split(/\s+/)[0];
   const deviceById = new Map((devices ?? []).map(device => [device.id, device]));
   const initials = user.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("es");
   const today = new Intl.DateTimeFormat("es-PY", {
@@ -47,15 +47,15 @@ export function DashboardView({ user, data, devices, priorities }: { user: UserP
           <span>Security Center<span className="brand-ai">AI</span></span>
         </Link>
 
-        <p className="nav-section-label">MI ESPACIO</p>
-        <nav className="sidebar-nav" aria-label="Secciones de tu espacio">
-          <a href="#resumen" className="nav-link nav-link--active"><Icon name="grid" className="nav-icon" /><span>Resumen</span></a>
+        <p className="nav-section-label">Tu espacio</p>
+        <SidebarNav>
+          <a href="#resumen" className="nav-link nav-link--active" aria-current="location"><Icon name="grid" className="nav-icon" /><span>Resumen</span></a>
           <a href="#historial" className="nav-link"><Icon name="history" className="nav-icon" /><span>Historial</span></a>
           <Link href="/getting-started" className="nav-link"><Icon name="info" className="nav-icon" /><span>Primeros pasos</span></Link>
           <Link href="/devices" className="nav-link"><Icon name="monitor" className="nav-icon" /><span>Dispositivos</span></Link>
           <Link href="/tools/scam-check" className="nav-link"><Icon name="mail" className="nav-icon" /><span>Enlaces y mensajes</span></Link>
           <Link href="/account" className="nav-link"><Icon name="user" className="nav-icon" /><span>Mi cuenta</span></Link>
-        </nav>
+        </SidebarNav>
 
 
         <div className="sidebar-bottom">
@@ -77,7 +77,6 @@ export function DashboardView({ user, data, devices, priorities }: { user: UserP
           <section id="resumen" aria-labelledby="dashboard-title">
             <div className="page-heading dashboard-page-heading">
               <div>
-                <p className="page-greeting">Hola{firstName ? `, ${firstName}` : ""} <span aria-hidden="true">✦</span></p>
                 <h1 id="dashboard-title">Tu seguridad, en un solo lugar</h1>
                 <p className="page-description">Este es tu espacio para consultar los resultados guardados de tu cuenta.</p>
               </div>
@@ -91,7 +90,6 @@ export function DashboardView({ user, data, devices, priorities }: { user: UserP
                   <p className="metric-value">{data.securityScore ?? "—"}</p>
                   <p className="metric-caption">{data.lastAnalysis?.source === "windows-agent" ? `Cobertura ${data.lastAnalysis.coveragePercent}% · ${data.lastAnalysis.unknownCount} sin determinar` : data.securityScore === null ? "Aún no hay un puntaje disponible." : "Corresponde a tu análisis más reciente."}</p>
                 </div>
-                <div className="score-visual" aria-hidden="true"><div className="score-orbit"><Icon name="shield" width="32" height="32" /></div></div>
               </article>
               <article className="metric-card">
                 <p className="metric-label">Análisis registrados <span className="metric-icon"><Icon name="history" /></span></p>
@@ -161,7 +159,6 @@ export function DashboardUnavailable() {
     <main className="unavailable-layout">
       <section className="unavailable-card" aria-labelledby="unavailable-title">
         <div className="unavailable-icon"><Icon name="warning" width="30" height="30" /></div>
-        <p className="eyebrow">SECURITY CENTER AI</p>
         <h1 id="unavailable-title">No pudimos cargar tu espacio</h1>
         <p>El servicio no está disponible en este momento. Volvé a intentar en unos instantes para consultar tu cuenta y sus resultados.</p>
         <div className="unavailable-actions"><RefreshButton /><form action={logoutAction}><LogoutButton secondary /></form></div>

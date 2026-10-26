@@ -1,0 +1,17 @@
+{
+  "$description": "Valores compartidos de Security Center AI. Implementación: src/SecurityCenterAI.Web/src/app/design-system.css",
+  "color": {
+    "background": "#f4f7fb", "surface": "#ffffff", "ink": "#1b2d45",
+    "muted": "#53657b", "line": "#dce4ed", "night": "#102239",
+    "teal": "#08786d", "tealHover": "#065e56", "tealSoft": "#eaf5f2",
+    "inputLine": "#7c8da0", "danger": "#ad3545",
+    "unknownInk": "#285b86", "unknownSurface": "#edf4fc",
+    "attentionInk": "#835311", "attentionSurface": "#fff6e5"
+  },
+  "font": { "family": "Segoe UI Variable, Segoe UI, system-ui, sans-serif", "bodyPx": 16, "bodyLineHeight": 1.65, "readingMeasure": "75ch" },
+  "spacingPx": [4, 8, 12, 16, 24, 32, 40, 48],
+  "radiusPx": { "control": 9, "badge": 6, "panel": 14 },
+  "control": { "minimumHeightPx": 44, "inputHeightPx": 48, "focusWidthPx": 3, "focusOffsetPx": 4 },
+  "motion": { "purpose": "Comunicar espera o interacción; sin entradas de página", "feedbackMs": 120, "releaseMs": 180, "ease": "cubic-bezier(.16, 1, .3, 1)", "buttonPressScale": 0.985, "reducedMotion": "Sin desplazamiento al pulsar ni animación de Pensando; colores y foco siguen comunicando el estado" },
+  "status": { "passed": "Correcto", "attention": "Revisar", "unknown": "Desconocido", "notApplicable": "No aplica" }
+}

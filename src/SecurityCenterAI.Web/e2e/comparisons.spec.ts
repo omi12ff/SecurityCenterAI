@@ -87,7 +87,7 @@ test('comparación móvil permite elegir informes y muestra evidencia como texto
   await expect(page.getByLabel('Análisis reciente', { exact: true })).toHaveValue(target.analysisId);
   await page.getByLabel('Análisis reciente', { exact: true }).selectOption(baseline.analysisId);
   await page.getByRole('button', { name: 'Comparar', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Elegí dos análisis distintos');
+  await expect(main.getByRole('alert')).toContainText('Elegí dos análisis distintos');
   await page.getByLabel('Análisis reciente', { exact: true }).selectOption(target.analysisId);
   await page.getByRole('button', { name: 'Comparar', exact: true }).click();
   await expect(main).toContainText('Información perdida');

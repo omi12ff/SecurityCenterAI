@@ -193,7 +193,7 @@ public sealed class AccountEmailChangeTests
     }
 
     [Fact]
-    public async Task RecoveryRemainsCommittedIfItsNotificationCannotBeQueued()
+    public async Task FailureToStageRecoveryNoticeLeavesTheTokenAndSessionUsable()
     {
         using var factory = new AccountApiFactory(); using var client = factory.CreateApiClient();
         var account = AccountCredentials.New(); var owner = await VerifiedAsync(factory, client, account);
@@ -201,8 +201,12 @@ public sealed class AccountEmailChangeTests
         var token = factory.Email.TokenFor(account.Email, AccountEmailPurpose.PasswordReset);
         factory.Email.RejectedPurpose = AccountEmailPurpose.PasswordResetCompleted;
         using var reset = await client.PostAsJsonAsync("/api/auth/reset-password", new { token, password = AccountPasswordChangeTests.NewPassword });
-        Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
-        using var replay = await client.PostAsJsonAsync("/api/auth/reset-password", new { token, password = account.Password }); Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, reset.StatusCode);
+        using (var existing = AccountApiFactory.AuthorizedRequest(HttpMethod.Get, "/api/auth/me", owner.AccessToken))
+        using (var active = await client.SendAsync(existing)) Assert.Equal(HttpStatusCode.OK, active.StatusCode);
+        factory.Email.RejectedPurpose = null;
+        using var retry = await client.PostAsJsonAsync("/api/auth/reset-password", new { token, password = AccountPasswordChangeTests.NewPassword });
+        Assert.Equal(HttpStatusCode.NoContent, retry.StatusCode);
         using var request = AccountApiFactory.AuthorizedRequest(HttpMethod.Get, "/api/auth/me", owner.AccessToken);
         using var denied = await client.SendAsync(request); Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
         await AccountSessionManagementTests.LoginAsync(client, account with { Password = AccountPasswordChangeTests.NewPassword });

@@ -19,6 +19,7 @@ public sealed class BackupPostgresFactAttribute : FactAttribute
     }
 }
 
+[Collection("BackupPostgres")]
 public sealed class BackupPostgresTests
 {
     private const string Password = "contraseña ficticia 🔐 solo pruebas 2026";

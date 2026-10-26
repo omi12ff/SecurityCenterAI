@@ -1,6 +1,11 @@
 [CmdletBinding()]
 param([ValidateRange(1024, 65535)][int]$Port = 5169,
-    [ValidateRange(1024, 65535)][int]$SmtpPort = 1025)
+    [ValidateRange(1024, 65535)][int]$SmtpPort = 1025,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]*$')][string]$Configuration = 'StatusTools',
+    [ValidateRange(1, 1000000)][int]$QueueWarningCount = 100,
+    [ValidateRange(1, 10080)][int]$QueueWarningAgeMinutes = 10,
+    [ValidatePattern('^scai_audit_test_[a-f0-9]{32}$')][string]$DatabaseName,
+    [switch]$NoBuild)
 
 $ErrorActionPreference = 'Stop'
 $baseUrl = "http://localhost:$Port"
@@ -9,6 +14,7 @@ $checks = @(
     @{ Label = 'PostgreSQL desde la API'; Path = '/health/ready'; Expected = 'ready' }
 )
 $unavailable = $false
+$queueAttention = $false
 foreach ($check in $checks) {
     try {
         $response = Invoke-RestMethod -Uri ($baseUrl + $check.Path) -TimeoutSec 6
@@ -48,6 +54,42 @@ finally {
     if ($null -ne $reader) { $reader.Dispose() }
     $smtpClient.Dispose()
 }
-Write-Host 'Consulta local sin envio de correo. No verifica entrega, TLS/credenciales SMTP de produccion, esquema, agente ni backups.'
+try {
+    $queueArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'email-queue-status.ps1'),
+        '-Configuration', $Configuration, '-WarningCount', $QueueWarningCount, '-WarningAgeMinutes', $QueueWarningAgeMinutes)
+    if ($NoBuild) { $queueArguments += '-NoBuild' }
+    if ($DatabaseName) { $queueArguments += @('-DatabaseName', $DatabaseName) }
+    $queueOutput = & powershell @queueArguments
+    $queueExit = $LASTEXITCODE
+    if ($queueExit -notin @(0, 3)) { throw 'Queue status unavailable.' }
+    $queue = $queueOutput | ConvertFrom-Json
+    if ($queue.reportVersion -ne 1 -or $queue.status -notin @('ok','attention')) { throw 'Invalid queue status.' }
+    Write-Host 'Cola de correo persistente: consulta disponible.'
+    Write-Host ("  Total: {0}; listos: {1}; en espera: {2}; reservados: {3}; vencidos: {4}; sin intentos: {5}." -f
+        $queue.counts.total, $queue.counts.ready, $queue.counts.waiting, $queue.counts.reserved, $queue.counts.expired, $queue.counts.exhausted)
+    Write-Host ("  Pendientes con intentos previos: {0}. Limite de intentos leido: {1}." -f $queue.counts.retryPending, $queue.deliveryAttemptLimit)
+    if ($null -eq $queue.oldestAgeSeconds) { Write-Host '  Antiguedad: sin pendientes.' }
+    else { Write-Host ("  Antiguedad mayor: {0:N1} minutos; creado {1:u} (UTC)." -f
+        ($queue.oldestAgeSeconds / 60.0), ([datetime]$queue.oldestCreatedAtUtc).ToUniversalTime()) }
+    if ($null -eq $queue.nextAttemptAtUtc) { Write-Host '  Proximo intento sin reserva: ninguno pendiente.' }
+    elseif ([datetime]$queue.nextAttemptAtUtc -le [datetime]$queue.checkedAtUtc) { Write-Host '  Proximo intento sin reserva: habilitado ahora.' }
+    else { Write-Host ("  Proximo intento sin reserva: {0:u} (UTC)." -f ([datetime]$queue.nextAttemptAtUtc).ToUniversalTime()) }
+    if ($null -ne $queue.nextReservationExpiryAtUtc) {
+        Write-Host ("  Proxima reserva que vence: {0:u} (UTC)." -f ([datetime]$queue.nextReservationExpiryAtUtc).ToUniversalTime())
+    }
+    if ($queue.status -eq 'attention') {
+        $queueAttention = $true
+        $labels = @{
+            'queue_count_threshold' = 'cantidad de pendientes en el umbral'
+            'oldest_age_threshold' = 'antiguedad en el umbral'
+            'expired_pending' = 'vencidos pendientes de retirada'
+            'attempts_exhausted' = 'intentos agotados pendientes de retirada'
+        }
+        foreach ($warning in $queue.warnings) { if ($labels.ContainsKey($warning)) { Write-Host ("  Para revisar: {0}." -f $labels[$warning]) } }
+    }
+}
+catch { $unavailable = $true; Write-Host 'Cola de correo persistente: no disponible o no comprobada; revisa herramientas, conexion, permisos y migracion.' }
+Write-Host 'Consulta local de solo lectura, sin envio ni descifrado. No prueba entrega final, worker activo, TLS SMTP de produccion, esquema completo, agente ni backups.'
 if ($unavailable) { exit 1 }
+if ($queueAttention) { exit 3 }
 exit 0

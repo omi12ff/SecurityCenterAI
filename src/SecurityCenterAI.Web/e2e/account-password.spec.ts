@@ -34,7 +34,7 @@ test('cambiar contraseña exige la actual, cierra accesos y envía un aviso sin 
   expect(notice.includes('Se cambió la contraseña')).toBe(true);
   await loginAccount(page, { ...account, password: replacement });
   await page.goto('/account/activity');
-  await expect(page.getByText('Contraseña cambiada desde Mi cuenta', { exact: true })).toBeVisible();
+  await expect(page.getByRole('list').getByText('Contraseña cambiada desde Mi cuenta', { exact: true })).toBeVisible();
 });
 
 test('el formulario móvil confirma coincidencia y cierre sin modificar la cuenta ante errores', async ({ page, account }) => {

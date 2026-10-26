@@ -1,3 +1,4 @@
+import { postgresExecArgs } from './database.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -24,15 +25,25 @@ type AccountExport = {
     feedback: { rating: string; comment: string | null; explanationVersion: number; updatedAtUtc: string } | null }[];
   deletedReports: { deviceId: string; reportId: string; deletedAtUtc: string }[];
   securityActivity: { id: string; action: string; occurredAtUtc: string }[];
+  pendingEmailChange: null | { newEmail: string; createdAtUtc: string; expiresAtUtc: string; currentAddressConfirmed: boolean; newAddressConfirmed: boolean };
+  linkMessageUsage: null | { dayUtc: string; checks: number };
 };
 
 function expectAccountExportShape(value: AccountExport) {
-  expect(Object.keys(value).sort()).toEqual(['exportVersion', 'exportedAtUtc', 'profile', 'devices', 'analyses', 'deletedReports', 'securityActivity'].sort());
+  expect(Object.keys(value).sort()).toEqual(['exportVersion', 'exportedAtUtc', 'profile', 'devices', 'analyses', 'deletedReports', 'securityActivity', 'pendingEmailChange', 'linkMessageUsage'].sort());
   expect(value.exportVersion).toBe(1);
   expect(Number.isFinite(Date.parse(value.exportedAtUtc))).toBe(true);
   expect(Object.keys(value.profile).sort()).toEqual(['id', 'name', 'email', 'createdAtUtc', 'emailVerified'].sort());
   expect(Number.isFinite(Date.parse(value.profile.createdAtUtc))).toBe(true);
   expect(typeof value.profile.emailVerified).toBe('boolean');
+  if (value.pendingEmailChange !== null) {
+    expect(Object.keys(value.pendingEmailChange).sort()).toEqual([
+      'newEmail', 'createdAtUtc', 'expiresAtUtc', 'currentAddressConfirmed', 'newAddressConfirmed',
+    ].sort());
+  }
+  if (value.linkMessageUsage !== null) {
+    expect(Object.keys(value.linkMessageUsage).sort()).toEqual(['dayUtc', 'checks']);
+  }
   for (const device of value.devices) {
     expect(Object.keys(device).sort()).toEqual([
       'id', 'name', 'createdAtUtc', 'pairedAtUtc', 'lastSeenAtUtc', 'revokedAtUtc',
@@ -78,7 +89,7 @@ function seedLegacyExportHistory(account: TestAccount): string {
   }
   const analysisId = randomUUID();
   const result = spawnSync('docker', [
-    'compose', 'exec', '-T', 'postgres', 'sh', '-c',
+    ...postgresExecArgs(), 'sh', '-c',
     'exec psql --no-psqlrc --set=ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --set=seed_email="$1" --set=seed_analysis="$2"',
     'account-export-e2e', account.email, analysisId,
   ], {

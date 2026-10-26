@@ -1,6 +1,6 @@
 # Roadmap
 
-Actualizado: 2026-10-24. [Inventario consolidado de pendientes](docs/PENDING_FEATURES.md).
+Actualizado: 2026-10-26. [Inventario consolidado de pendientes](docs/PENDING_FEATURES.md).
 
 La planificación sigue la [Guía Maestra de Security Center AI](docs/Guia_Maestra_Security_Center_AI_Actualizada.pdf), documento 1.0
 del 2026-07-27. Su número de versión identifica el documento; el producto
@@ -42,16 +42,16 @@ La beta privada 0.5 todavía está incompleta. Los comandos de ejecución están
 | PostgreSQL / EF Core | Usuario, análisis, sesiones, credenciales de renovación y tokens de cuenta; migraciones versionadas. |
 | Dashboard del backend | Devuelve el último puntaje guardado, total y cinco análisis recientes del usuario autenticado. |
 | Desarrollo local | SDK fijado, herramienta local de EF y script para iniciar, migrar y probar. |
-| Pruebas del backend | 251 habituales aprobadas de nuevo en `ReleaseClosureQa`; 23 PostgreSQL omitidas de esa corrida y aprobadas aparte: 16 de cuentas/actividad, 4 de retención y 3 de backups. |
+| Pruebas del backend | 390 aprobadas, incluidas 118 de IA; las 40 PostgreSQL omitidas de la suite habitual conservan su corrida aparte en bases temporales. Dependencias de pruebas parcheadas y auditoría NuGet sin alertas conocidas. [Evidencia](docs/VERIFICATION.md). |
 | Frontend Next.js | Registro, login, dashboard, cuenta y formularios de verificación y recuperación en español. |
 | Sesión web | Cookies `HttpOnly` de access y refresh, renovación rotatoria, logout y cierre global con revocación en la API. |
-| Correo local | SMTP de pruebas con Mailpit; configuración autenticada y TLS exigidos fuera de desarrollo. |
-| Pruebas de la web | 96/96 unitarias, tipos y build correctos. Páginas informativas/reportes y recorrido integrado con cuenta/agente ficticios; resultados por corrida en el changelog. No equivale a toda la suite E2E histórica. |
+| Correo local | Mailpit y cola cifrada persistente en PostgreSQL, con reservas/reintentos recuperables. DPAPI del usuario Windows de la API. SMTP externo, claves del alojamiento y operación pendientes. |
+| Pruebas de la web | 103 unitarias aprobadas, tipos y build comprobados. Suite E2E revisada con base, API y web propias; IA con transporte ficticio. [Resultados y repetición](docs/VERIFICATION.md). |
 | Dispositivos y base de resultados | Vinculación, credencial propia, revocación e historial de resultados por dispositivo, con autorización separada de cuenta y cliente. |
 | Agente Windows y verificaciones locales | Consola con diez comprobaciones, credencial DPAPI, heartbeat y envío explícito. Distribución portátil ZIP win-x64 con runtime incluido, diagnóstico local y manifiesto de integridad; sin servicio ni instalador. |
-| Pruebas del agente | 145/145 aprobadas nuevamente en Windows en `ReleaseClosureQa`: DPAPI, consultas controladas, envío, lectura y `410`. Las diez sondas reales conservan las comprobaciones manuales de bloques previos. |
+| Pruebas del agente | 145/145 aprobadas nuevamente en la corrida consolidada del 2026-10-26: DPAPI, consultas controladas, envío, lectura y `410`. Las diez sondas reales conservan las comprobaciones manuales de bloques previos. |
 | Ingesta y puntos confirmados | Esquema 2, identificador de reporte idempotente por dispositivo, validación de diez reglas, catálogo del servidor, cobertura y resultados parciales; evidencia de pruebas en el changelog. |
-| Explicaciones | Guías locales v1 y feedback privado por análisis. Sin servicio de IA externo. |
+| Explicaciones | Guías locales v1 y feedback privado. Explicación de IA opcional por análisis, desactivada por defecto. El usuario habilitó la configuración con clave de producto y `openrouter/openrouter/free`; API reiniciada y habilitada para una prueba explícita desde la interfaz, con una respuesta real sintética de diez comprobaciones y sin usar el informe personal. Mantiene puntos/cobertura y datos reducidos. [Alcance](docs/AI_EXPLANATIONS.md). |
 | Enlaces y mensajes | Revisión explícita con reglas locales limitadas, sin abrir destinos. Cuota diaria combinada por cuenta, persistida en PostgreSQL; no guarda contenido o resultados. |
 | Presentación pública | Landing local para visitantes, registro, recorrido, datos y FAQ. Sesiones existentes conservan acceso directo al dashboard. Políticas/contacto públicos pendientes. |
 | Primeros pasos | Progreso propio de correo/equipo/vinculación/análisis; ZIP privado configurado, integridad comprobada y guía de comandos manuales. No ejecuta el agente desde la web. |
@@ -61,7 +61,7 @@ La beta privada 0.5 todavía está incompleta. Los comandos de ejecución están
 | Control del historial | Exportación JSON de un análisis y feedback propio; borrado individual confirmado, marca mínima de eliminación y rechazo `410` del mismo reporte. La validación de este bloque se registra por separado. |
 | Exportación de cuenta | JSON de perfil, todos los equipos e informes, feedback y marcas mínimas propios; incluye historial antiguo sin dispositivo y equipos revocados. |
 | Mantenimiento técnico | Vista previa y purga confirmada por lotes de autenticación antigua; trabajo periódico desactivado por defecto. Conserva contenido y hashes de sesiones activas. |
-| Backups locales | Copia manual cifrada con contraseña e inventario de la misma instantánea; ensayo de restauración en una base temporal. Programación, copia externa y recuperación real pendientes. |
+| Backups locales | Copia manual cifrada, inventario de la misma instantánea y restauración temporal. `rehearse` comprueba invalidación de accesos y conservación del contenido solo en esa copia. Programación, copia externa y recuperación real pendientes. |
 | Actividad privada de seguridad | Catorce tipos de acciones completadas; filtros de acción/días UTC y continuación hacia eventos anteriores, 50 por consulta. Exportación completa sin filtros. Se elimina con la cuenta. Auditoría externa y monitoreo siguen pendientes. |
 
 El dashboard consulta análisis almacenados. El agente puede comprobar diez
@@ -83,7 +83,7 @@ PostgreSQL real por separado.
 | 1.0 | Lanzamiento público gratuito | Web pública, agente Windows, historial y detector básico de enlaces y mensajes. | Foco actual de desarrollo. Landing y detector incorporados; faltan cierre del recorrido, políticas/contacto y preparación de publicación. Compatibilidad externa pospuesta. |
 | 1.1 | Automatización | Análisis programados, alertas, comparación de resultados y verificación de soluciones. | Comparación manual de resultados adelantada. Programación, alertas y verificación de soluciones siguen pendientes. |
 | 1.2 | Drivers y salud | Errores PnP, drivers faltantes, firmas, versiones y recomendaciones desde fuentes oficiales. | Pendiente. |
-| 1.3 | Escritorio | Icono de bandeja, interfaz local, notificaciones y actualizador seguro. | Pendiente. |
+| 1.3 | Escritorio | Icono de bandeja, interfaz local, notificaciones y actualizador seguro; visión de vigilancia y autonomía acotadas por plan y aprobaciones. | Pendiente; la consola actual no automatiza análisis ni acciones. |
 | 1.5 | Familia | Varios miembros, panel familiar y dispositivos compartidos. | Pendiente. |
 | 2.0 | Monetización | Planes pagos, límites por plan, facturación y soporte prioritario. | Pendiente. |
 | Futuro | Móvil y negocios | Aplicación acompañante, pequeños negocios y nuevas plataformas. | Exploratorio, sin compromiso de implementación. |
@@ -104,8 +104,10 @@ este avance no completa la beta privada y no publica la web.
    por dispositivo. [Protocolo e interpretación](docs/ANALYSIS_INGESTION.md).
    Comprobaciones efectivas de este bloque en [CHANGELOG.md](CHANGELOG.md).
 3. **Incorporado:** guías locales v1 con evidencia, referencias de Microsoft y
-   feedback privado editable por análisis. Se eligió no integrar IA externa.
-   [Uso y límites](docs/LOCAL_GUIDES_AND_FEEDBACK.md).
+   feedback privado editable por análisis. La decisión inicial de no integrar IA
+   externa se amplía el 2026-10-25 con explicación opcional, por consulta confirmada,
+   sin inferencia externa comprobada y desactivada por defecto. [Guías](docs/LOCAL_GUIDES_AND_FEEDBACK.md),
+   [IA opcional](docs/AI_EXPLANATIONS.md).
 4. **Incorporado:** distribución portátil `win-x64`, runtime incluido, diagnóstico
    básico sin acceso a credenciales y protocolo de pruebas supervisadas con matriz
    de compatibilidad. La comprobación en otras PC y con usuarios autorizados queda
@@ -145,7 +147,8 @@ este avance no completa la beta privada y no publica la web.
    o auditoría externa inalterable. [Uso y alcance](docs/SECURITY_ACTIVITY.md).
 13. **Incorporado:** readiness de PostgreSQL de solo lectura, liveness independiente
    y logs mínimos con id generado por el servidor. Incluye `scripts/status.ps1`;
-   no comprueba entrega SMTP ni activa alertas. [Uso](docs/OPERATIONAL_MONITORING.md).
+   agrega diagnóstico local de cola, avisos por cantidad/edad y JSON de contadores.
+   No comprueba entrega SMTP ni activa alertas externas. [Uso](docs/OPERATIONAL_MONITORING.md).
 14. **Incorporado:** listado paginado de sesiones web propias y cierre individual
    confirmado desde Mi cuenta, incluida la actual. Conserva otros accesos y la
    autorización independiente de equipos. [Uso y límites](docs/ACCOUNT_SESSIONS.md).
@@ -160,7 +163,7 @@ este avance no completa la beta privada y no publica la web.
    y capacidad de sesiones por cuenta probada con concurrencia real. Conserva
    claves y accesos existentes. [Alcance](docs/ACCOUNT_SECURITY_POLICY.md).
 18. **Incorporado:** reintentos SMTP temporales, descarte acotado y diagnóstico
-   NOOP sin mensaje. La cola sigue en memoria; durabilidad y entrega externa
+   NOOP sin mensaje. Cola cifrada durable incorporada; entrega externa y operación
    permanecen pendientes. [Uso](docs/MAIL_DELIVERY.md).
 19. **Incorporado:** verificación local consolidada y definición Windows de CI
    con acciones fijadas y permisos mínimos. Workflow validado con actionlint;
@@ -192,11 +195,15 @@ este avance no completa la beta privada y no publica la web.
    preparación de publicación. Responsable, país y contacto siguen sin definir,
    con recordatorio solicitado. Otra PC/VM continúa pospuesta. [Plan 1.0](docs/RELEASE_1_0.md).
 29. Antes de un despliegue externo, resolver los controles de cuentas pendientes:
-   política de contraseñas, MFA, correo durable, retención, auditoría y límites
+   política de contraseñas, MFA, operación del correo, retención, auditoría y límites
    con proxies o varias instancias. El recorrido básico local ya está comprobado.
    Conservación, copias externas/programación, recuperación real y auditoría
    operativa siguen pendientes; [procedimiento inicial](docs/RECOVERY_RUNBOOK.md).
    Probar en otra PC/VM queda explícitamente pospuesto hasta disponer de ese entorno.
+30. **Incorporado:** ensayo aislado de invalidación de sesiones, enlaces, agentes,
+   solicitudes y cola de correo restaurados, con conservación por huellas y
+   rollback. Esquema revisado obligatorio; base temporal retirada. No concilia
+   borrados posteriores ni restablece el servicio. [Uso](docs/RECOVERY_REHEARSAL.md).
 
 ## Criterios para la beta y el lanzamiento
 
